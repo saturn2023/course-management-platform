@@ -2,11 +2,12 @@
 
 namespace App\Jobs;
 
-use App\Models\Order;
 use App\Models\IntegrationLog;
+use App\Models\Order;
+use App\Models\XeroConnection;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
 use Throwable;
 
 class CreateXeroInvoiceJob implements ShouldQueue
@@ -21,31 +22,57 @@ class CreateXeroInvoiceJob implements ShouldQueue
 
     public function handle(): void
     {
-        $order = Order::with(['student', 'items'])->findOrFail($this->orderId);
+        $order = Order::with(['student', 'items.course'])->findOrFail($this->orderId);
+
+        $connection = XeroConnection::where('is_active', true)->first();
+
+        if (! $connection) {
+            throw new \Exception('No active Xero connection found.');
+        }
 
         $order->update([
             'xero_status' => 'processing',
             'xero_error_message' => null,
         ]);
 
+        $payload = $this->buildInvoicePayload($order);
+
         IntegrationLog::create([
             'order_id' => $order->id,
             'service' => 'xero',
             'action' => 'create_invoice',
             'status' => 'processing',
-            'request_payload' => json_encode($this->buildFakeXeroPayload($order)),
+            'request_payload' => json_encode($payload),
         ]);
 
         try {
-            // Fake Xero API response for now.
-            // Later we will replace this with the real Xero API call.
-            $fakeInvoiceId = 'XERO-' . Str::upper(Str::random(10));
-            $fakeInvoiceNumber = 'INV-' . str_pad((string) $order->id, 5, '0', STR_PAD_LEFT);
+            if ($connection->expires_at && $connection->expires_at->isPast()) {
+                $connection = $this->refreshToken($connection);
+            }
+
+            $response = Http::withToken($connection->access_token)
+                ->withHeaders([
+                    'xero-tenant-id' => $connection->tenant_id,
+                    'Accept' => 'application/json',
+                ])
+                ->post('https://api.xero.com/api.xro/2.0/Invoices', $payload);
+
+            if (! $response->successful()) {
+                throw new \Exception('Xero invoice creation failed: ' . $response->body());
+            }
+
+            $responseData = $response->json();
+
+            $invoice = $responseData['Invoices'][0] ?? null;
+
+            if (! $invoice) {
+                throw new \Exception('Xero response did not contain invoice data.');
+            }
 
             $order->update([
                 'xero_status' => 'success',
-                'xero_invoice_id' => $fakeInvoiceId,
-                'xero_invoice_number' => $fakeInvoiceNumber,
+                'xero_invoice_id' => $invoice['InvoiceID'] ?? null,
+                'xero_invoice_number' => $invoice['InvoiceNumber'] ?? null,
                 'xero_error_message' => null,
             ]);
 
@@ -54,12 +81,8 @@ class CreateXeroInvoiceJob implements ShouldQueue
                 'service' => 'xero',
                 'action' => 'create_invoice',
                 'status' => 'success',
-                'request_payload' => json_encode($this->buildFakeXeroPayload($order)),
-                'response_payload' => json_encode([
-                    'invoice_id' => $fakeInvoiceId,
-                    'invoice_number' => $fakeInvoiceNumber,
-                    'message' => 'Fake Xero invoice created successfully.',
-                ]),
+                'request_payload' => json_encode($payload),
+                'response_payload' => json_encode($responseData),
             ]);
         } catch (Throwable $exception) {
             $order->update([
@@ -72,7 +95,7 @@ class CreateXeroInvoiceJob implements ShouldQueue
                 'service' => 'xero',
                 'action' => 'create_invoice',
                 'status' => 'failed',
-                'request_payload' => json_encode($this->buildFakeXeroPayload($order)),
+                'request_payload' => json_encode($payload),
                 'error_message' => $exception->getMessage(),
             ]);
 
@@ -80,22 +103,61 @@ class CreateXeroInvoiceJob implements ShouldQueue
         }
     }
 
-    private function buildFakeXeroPayload(Order $order): array
+    private function buildInvoicePayload(Order $order): array
     {
+        $student = $order->student;
+
         return [
-            'type' => 'ACCREC',
-            'contact' => [
-                'name' => $order->student?->full_name ?? 'Unknown Student',
-                'email' => $order->student?->email,
+            'Invoices' => [
+                [
+                    'Type' => 'ACCREC',
+                    'Contact' => [
+                        'Name' => $student?->full_name ?? 'Test Student',
+                        'EmailAddress' => $student?->email,
+                    ],
+                    'Date' => now()->toDateString(),
+                    'DueDate' => now()->addDays(7)->toDateString(),
+                    'Reference' => 'Laravel Order #' . $order->id,
+                    'Status' => 'DRAFT',
+                    'LineAmountTypes' => 'Inclusive',
+                    'LineItems' => $order->items->map(function ($item) {
+                        return [
+                            'Description' => $item->name,
+                            'Quantity' => $item->quantity,
+                            'UnitAmount' => (float) $item->unit_price,
+                            'AccountCode' => '200',
+                            'TaxType' => 'OUTPUT',
+                        ];
+                    })->values()->toArray(),
+                ],
             ],
-            'line_items' => $order->items->map(fn ($item) => [
-                'description' => $item->name,
-                'quantity' => $item->quantity,
-                'unit_amount' => (float) $item->unit_price,
-                'line_amount' => (float) $item->total,
-            ])->toArray(),
-            'total' => (float) $order->total,
-            'status' => 'AUTHORISED',
         ];
+    }
+
+    private function refreshToken(XeroConnection $connection): XeroConnection
+    {
+        $response = Http::asForm()
+            ->withBasicAuth(
+                config('services.xero.client_id'),
+                config('services.xero.client_secret')
+            )
+            ->post('https://identity.xero.com/connect/token', [
+                'grant_type' => 'refresh_token',
+                'refresh_token' => $connection->refresh_token,
+            ]);
+
+        if (! $response->successful()) {
+            throw new \Exception('Failed to refresh Xero token: ' . $response->body());
+        }
+
+        $tokenData = $response->json();
+
+        $connection->update([
+            'access_token' => $tokenData['access_token'],
+            'refresh_token' => $tokenData['refresh_token'],
+            'expires_at' => now()->addSeconds($tokenData['expires_in']),
+        ]);
+
+        return $connection->fresh();
     }
 }
