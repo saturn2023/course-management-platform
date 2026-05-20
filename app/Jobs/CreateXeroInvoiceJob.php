@@ -23,7 +23,24 @@ class CreateXeroInvoiceJob implements ShouldQueue
     public function handle(): void
     {
         $order = Order::with(['student', 'items.course'])->findOrFail($this->orderId);
+        if ($order->xero_invoice_id) {
+    IntegrationLog::create([
+        'order_id' => $order->id,
+        'service' => 'xero',
+        'action' => 'create_invoice',
+        'status' => 'skipped',
+        'request_payload' => json_encode([
+            'order_id' => $order->id,
+            'existing_xero_invoice_id' => $order->xero_invoice_id,
+            'existing_xero_invoice_number' => $order->xero_invoice_number,
+        ]),
+        'response_payload' => json_encode([
+            'message' => 'Skipped Xero invoice creation because this order already has a Xero invoice.',
+        ]),
+    ]);
 
+    return;
+}
         $connection = XeroConnection::where('is_active', true)->first();
 
         if (! $connection) {
