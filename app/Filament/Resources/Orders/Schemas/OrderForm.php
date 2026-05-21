@@ -30,18 +30,41 @@ class OrderForm
                     ->numeric()
                     ->default(0.0),
 
-                TextInput::make('status')
-                    ->required()
-                    ->default('pending'),
+               Select::make('status')
+    ->label('Order status')
+    ->options([
+        'pending' => 'Pending',
+        'paid' => 'Paid',
+        'cancelled' => 'Cancelled',
+    ])
+    ->required()
+    ->default('pending'),
 
-                TextInput::make('xero_status')
-                    ->required()
-                    ->default('pending'),
+Select::make('xero_status')
+    ->label('Xero status')
+    ->options([
+        'pending' => 'Pending',
+        'processing' => 'Processing',
+        'success' => 'Success',
+        'failed' => 'Failed',
+        'skipped' => 'Skipped',
+    ])
+    ->required()
+    ->default('pending'),
 
-                TextInput::make('enrolment_status')
-                    ->required()
-                    ->default('pending'),
-
+Select::make('enrolment_status')
+    ->label('Enrolment status')
+    ->options([
+        'pending' => 'Pending',
+        'processing' => 'Processing',
+        'link_created' => 'Link created',
+        'link_sent' => 'Link sent',
+        'completed' => 'Completed',
+        'failed' => 'Failed',
+        'skipped' => 'Skipped',
+    ])
+    ->required()
+    ->default('pending'),
                 Repeater::make('items')
                     ->label('Order Items')
                     ->relationship('items')
