@@ -52,7 +52,7 @@ class CreateEnrolmentJob implements ShouldQueue
 
         $students = $order->students;
 
-        // Temporary fallback while we are transitioning from one-student orders
+        // Temporary fallback while transitioning from one-student orders
         // to multiple-student orders.
         if ($students->isEmpty() && $order->student) {
             $students = collect([$order->student]);
@@ -235,6 +235,20 @@ class CreateEnrolmentJob implements ShouldQueue
                     'created_count' => $createdCount,
                     'skipped_count' => $skippedCount,
                     'email_queued_count' => $emailQueuedCount,
+                ]),
+            ]);
+
+            SendPurchaserConfirmationEmailJob::dispatch($order->id);
+
+            IntegrationLog::create([
+                'order_id' => $order->id,
+                'service' => 'email',
+                'action' => 'send_purchaser_confirmation',
+                'status' => 'queued',
+                'request_payload' => json_encode([
+                    'order_id' => $order->id,
+                    'billing_email' => $order->billing_email,
+                    'message' => 'Purchaser confirmation email job queued after enrolment links were processed.',
                 ]),
             ]);
         } catch (Throwable $exception) {

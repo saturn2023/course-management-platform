@@ -22,7 +22,7 @@ class Order extends Model
         'billing_city',
         'billing_postcode',
         'billing_abn',
-
+        'purchaser_confirmation_sent_at',
         'subtotal',
         'total',
         'status',
@@ -34,11 +34,12 @@ class Order extends Model
         'xero_error_message',
     ];
 
-    protected $casts = [
-        'subtotal' => 'decimal:2',
-        'total' => 'decimal:2',
-        'xero_sent_at' => 'datetime',
-    ];
+protected $casts = [
+    'subtotal' => 'decimal:2',
+    'total' => 'decimal:2',
+    'xero_sent_at' => 'datetime',
+    'purchaser_confirmation_sent_at' => 'datetime',
+];
 
     public function student(): BelongsTo
     {
