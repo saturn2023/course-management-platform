@@ -16,9 +16,53 @@ class OrderForm
         return $schema
             ->components([
                 Select::make('student_id')
-                    ->label('Student')
+                    ->label('Primary student')
                     ->relationship('student', 'id')
                     ->required(),
+
+                TextInput::make('billing_first_name')
+                    ->label('Billing first name'),
+
+                TextInput::make('billing_last_name')
+                    ->label('Billing last name'),
+
+                TextInput::make('billing_company')
+                    ->label('Company / Business name'),
+
+                TextInput::make('billing_email')
+                    ->label('Billing email')
+                    ->email(),
+
+                TextInput::make('billing_phone')
+                    ->label('Billing phone'),
+
+                TextInput::make('billing_address_1')
+                    ->label('Street address 1'),
+
+                TextInput::make('billing_address_2')
+                    ->label('Street address 2'),
+
+                TextInput::make('billing_city')
+                    ->label('City'),
+
+                TextInput::make('billing_postcode')
+                    ->label('Postcode'),
+
+                TextInput::make('billing_abn')
+                    ->label('ABN'),
+
+                Repeater::make('orderStudents')
+                    ->label('Students for this order')
+                    ->relationship('orderStudents')
+                    ->schema([
+                        Select::make('student_id')
+                            ->label('Student')
+                            ->relationship('student', 'id')
+                            ->searchable()
+                            ->required(),
+                    ])
+                    ->columnSpanFull()
+                    ->defaultItems(1),
 
                 TextInput::make('subtotal')
                     ->required()
@@ -30,41 +74,42 @@ class OrderForm
                     ->numeric()
                     ->default(0.0),
 
-               Select::make('status')
-    ->label('Order status')
-    ->options([
-        'pending' => 'Pending',
-        'paid' => 'Paid',
-        'cancelled' => 'Cancelled',
-    ])
-    ->required()
-    ->default('pending'),
+                Select::make('status')
+                    ->label('Order status')
+                    ->options([
+                        'pending' => 'Pending',
+                        'paid' => 'Paid',
+                        'cancelled' => 'Cancelled',
+                    ])
+                    ->required()
+                    ->default('pending'),
 
-Select::make('xero_status')
-    ->label('Xero status')
-    ->options([
-        'pending' => 'Pending',
-        'processing' => 'Processing',
-        'success' => 'Success',
-        'failed' => 'Failed',
-        'skipped' => 'Skipped',
-    ])
-    ->required()
-    ->default('pending'),
+                Select::make('xero_status')
+                    ->label('Xero status')
+                    ->options([
+                        'pending' => 'Pending',
+                        'processing' => 'Processing',
+                        'success' => 'Success',
+                        'failed' => 'Failed',
+                        'skipped' => 'Skipped',
+                    ])
+                    ->required()
+                    ->default('pending'),
 
-Select::make('enrolment_status')
-    ->label('Enrolment status')
-    ->options([
-        'pending' => 'Pending',
-        'processing' => 'Processing',
-        'link_created' => 'Link created',
-        'link_sent' => 'Link sent',
-        'completed' => 'Completed',
-        'failed' => 'Failed',
-        'skipped' => 'Skipped',
-    ])
-    ->required()
-    ->default('pending'),
+                Select::make('enrolment_status')
+                    ->label('Enrolment status')
+                    ->options([
+                        'pending' => 'Pending',
+                        'processing' => 'Processing',
+                        'link_created' => 'Link created',
+                        'link_sent' => 'Link sent',
+                        'completed' => 'Completed',
+                        'failed' => 'Failed',
+                        'skipped' => 'Skipped',
+                    ])
+                    ->required()
+                    ->default('pending'),
+
                 Repeater::make('items')
                     ->label('Order Items')
                     ->relationship('items')
