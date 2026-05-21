@@ -21,7 +21,21 @@ class ProcessOrderJob implements ShouldQueue
     public function handle(): void
     {
         $order = Order::with(['student', 'items'])->findOrFail($this->orderId);
+        if ($order->items->isEmpty()) {
+    IntegrationLog::create([
+        'order_id' => $order->id,
+        'service' => 'order_processor',
+        'action' => 'process_order',
+        'status' => 'failed',
+        'request_payload' => json_encode([
+            'order_id' => $order->id,
+            'reason' => 'Order has no items.',
+        ]),
+        'error_message' => 'Order cannot be processed because it has no order items.',
+    ]);
 
+    return;
+}
         IntegrationLog::create([
             'order_id' => $order->id,
             'service' => 'order_processor',

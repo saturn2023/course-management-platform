@@ -83,6 +83,7 @@ class OrdersTable
                     ->label('Process Order')
                     ->icon('heroicon-o-play')
                     ->color('success')
+                    ->visible(fn ($record) => $record->status === 'paid' && blank($record->xero_invoice_id))
                     ->requiresConfirmation()
                     ->action(function ($record) {
                         ProcessOrderJob::dispatch($record->id);
