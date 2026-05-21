@@ -39,11 +39,28 @@ class CreateEnrolmentJob implements ShouldQueue
                     'existing_enrolment_id' => $existingEnrolment->id,
                     'existing_external_enrolment_id' => $existingEnrolment->external_enrolment_id,
                     'existing_enrolment_link' => $existingEnrolment->enrolment_link,
+                    'email_sent_at' => $existingEnrolment->email_sent_at,
                 ]),
                 'response_payload' => json_encode([
                     'message' => 'Skipped enrolment link creation because this order already has an enrolment.',
                 ]),
             ]);
+
+            if (! $existingEnrolment->email_sent_at) {
+                SendEnrolmentEmailJob::dispatch($existingEnrolment->id);
+
+                IntegrationLog::create([
+                    'order_id' => $order->id,
+                    'service' => 'email',
+                    'action' => 'send_enrolment_link',
+                    'status' => 'queued',
+                    'request_payload' => json_encode([
+                        'enrolment_id' => $existingEnrolment->id,
+                        'student_email' => $existingEnrolment->student?->email,
+                        'message' => 'Existing enrolment found, email was not sent yet, so email job was queued.',
+                    ]),
+                ]);
+            }
 
             return;
         }
@@ -79,7 +96,7 @@ class CreateEnrolmentJob implements ShouldQueue
 
         try {
             // Fake enrolment link API response for now.
-            // Later this will be replaced with the real enrolment link API call.
+            // Later this will be replaced with the real AMS enrolment link API call.
             $externalEnrolmentId = 'ENR-' . Str::upper(Str::random(10));
 
             $enrolmentLink = 'https://example.com/enrolment/' . $externalEnrolmentId;
@@ -114,6 +131,20 @@ class CreateEnrolmentJob implements ShouldQueue
                     'external_enrolment_id' => $externalEnrolmentId,
                     'enrolment_link' => $enrolmentLink,
                     'message' => 'Fake enrolment link created successfully.',
+                ]),
+            ]);
+
+            SendEnrolmentEmailJob::dispatch($enrolment->id);
+
+            IntegrationLog::create([
+                'order_id' => $order->id,
+                'service' => 'email',
+                'action' => 'send_enrolment_link',
+                'status' => 'queued',
+                'request_payload' => json_encode([
+                    'enrolment_id' => $enrolment->id,
+                    'student_email' => $order->student?->email,
+                    'message' => 'Email job queued after enrolment link was created.',
                 ]),
             ]);
         } catch (Throwable $exception) {

@@ -17,8 +17,13 @@ class Enrolment extends Model
         'error_message',
         'request_payload',
         'response_payload',
+        'email_sent_at',
+        'link_sent_at',
     ];
-
+    protected $casts = [
+    'email_sent_at' => 'datetime',
+    'link_sent_at' => 'datetime',
+];
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
