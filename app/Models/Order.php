@@ -14,10 +14,15 @@ class Order extends Model
         'total',
         'status',
         'xero_status',
+        'xero_sent_at',
         'enrolment_status',
         'xero_invoice_id',
         'xero_invoice_number',
         'xero_error_message',
+    ];
+
+    protected $casts = [
+        'xero_sent_at' => 'datetime',
     ];
 
     public function student(): BelongsTo

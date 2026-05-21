@@ -24,6 +24,30 @@ class CreateEnrolmentJob implements ShouldQueue
     {
         $order = Order::with(['student', 'items.course'])->findOrFail($this->orderId);
 
+        $existingEnrolment = Enrolment::where('order_id', $order->id)
+            ->whereNotIn('status', ['failed'])
+            ->first();
+
+        if ($existingEnrolment) {
+            IntegrationLog::create([
+                'order_id' => $order->id,
+                'service' => 'enrolment_api',
+                'action' => 'create_enrolment_link',
+                'status' => 'skipped',
+                'request_payload' => json_encode([
+                    'order_id' => $order->id,
+                    'existing_enrolment_id' => $existingEnrolment->id,
+                    'existing_external_enrolment_id' => $existingEnrolment->external_enrolment_id,
+                    'existing_enrolment_link' => $existingEnrolment->enrolment_link,
+                ]),
+                'response_payload' => json_encode([
+                    'message' => 'Skipped enrolment link creation because this order already has an enrolment.',
+                ]),
+            ]);
+
+            return;
+        }
+
         $firstItem = $order->items->first();
 
         $payload = [
@@ -48,14 +72,14 @@ class CreateEnrolmentJob implements ShouldQueue
         IntegrationLog::create([
             'order_id' => $order->id,
             'service' => 'enrolment_api',
-            'action' => 'create_enrolment',
+            'action' => 'create_enrolment_link',
             'status' => 'processing',
             'request_payload' => json_encode($payload),
         ]);
 
         try {
-            // Fake enrolment API response for now.
-            // Later this will be replaced with the real enrolment API call.
+            // Fake enrolment link API response for now.
+            // Later this will be replaced with the real enrolment link API call.
             $externalEnrolmentId = 'ENR-' . Str::upper(Str::random(10));
 
             $enrolmentLink = 'https://example.com/enrolment/' . $externalEnrolmentId;
@@ -66,30 +90,30 @@ class CreateEnrolmentJob implements ShouldQueue
                 'course_id' => $firstItem?->course_id,
                 'external_enrolment_id' => $externalEnrolmentId,
                 'enrolment_link' => $enrolmentLink,
-                'status' => 'success',
+                'status' => 'link_created',
                 'request_payload' => json_encode($payload),
                 'response_payload' => json_encode([
                     'external_enrolment_id' => $externalEnrolmentId,
                     'enrolment_link' => $enrolmentLink,
-                    'message' => 'Fake enrolment created successfully.',
+                    'message' => 'Fake enrolment link created successfully.',
                 ]),
             ]);
 
             $order->update([
-                'enrolment_status' => 'success',
+                'enrolment_status' => 'link_created',
             ]);
 
             IntegrationLog::create([
                 'order_id' => $order->id,
                 'service' => 'enrolment_api',
-                'action' => 'create_enrolment',
+                'action' => 'create_enrolment_link',
                 'status' => 'success',
                 'request_payload' => json_encode($payload),
                 'response_payload' => json_encode([
                     'enrolment_id' => $enrolment->id,
                     'external_enrolment_id' => $externalEnrolmentId,
                     'enrolment_link' => $enrolmentLink,
-                    'message' => 'Fake enrolment created successfully.',
+                    'message' => 'Fake enrolment link created successfully.',
                 ]),
             ]);
         } catch (Throwable $exception) {
@@ -109,7 +133,7 @@ class CreateEnrolmentJob implements ShouldQueue
             IntegrationLog::create([
                 'order_id' => $order->id,
                 'service' => 'enrolment_api',
-                'action' => 'create_enrolment',
+                'action' => 'create_enrolment_link',
                 'status' => 'failed',
                 'request_payload' => json_encode($payload),
                 'error_message' => $exception->getMessage(),
