@@ -19,10 +19,13 @@ class Enrolment extends Model
         'response_payload',
         'email_sent_at',
         'link_sent_at',
+        'sms_sent_at',
+         'sms_error_message',
     ];
     protected $casts = [
     'email_sent_at' => 'datetime',
     'link_sent_at' => 'datetime',
+    'sms_sent_at' => 'datetime',
 ];
     public function order(): BelongsTo
     {

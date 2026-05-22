@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Orders\Tables;
 
 use App\Jobs\ProcessOrderJob;
 use App\Jobs\SendEnrolmentEmailJob;
+use App\Jobs\SendEnrolmentSmsJob;
 use App\Jobs\SendPurchaserConfirmationEmailJob;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -151,7 +152,7 @@ class OrdersTable
 
                         Notification::make()
                             ->title('Order processing started')
-                            ->body('Xero, enrolment, and email jobs have been queued.')
+                            ->body('Xero, enrolment, email, and SMS jobs have been queued where applicable.')
                             ->success()
                             ->send();
                     }),
@@ -178,6 +179,7 @@ class OrdersTable
 
                         $shouldRunFullProcess = false;
                         $studentEmailsQueued = 0;
+                        $studentSmsQueued = 0;
                         $purchaserEmailQueued = false;
 
                         if ($record->xero_status === 'failed' && blank($record->xero_invoice_id)) {
@@ -202,7 +204,10 @@ class OrdersTable
                         if ($enrolments->isNotEmpty()) {
                             foreach ($enrolments as $enrolment) {
                                 SendEnrolmentEmailJob::dispatch($enrolment->id, true);
+                                SendEnrolmentSmsJob::dispatch($enrolment->id, true);
+
                                 $studentEmailsQueued++;
+                                $studentSmsQueued++;
                             }
 
                             if (filled($record->billing_email)) {
@@ -220,6 +225,7 @@ class OrdersTable
                             ->body(
                                 'Retry jobs have been queued. '
                                 . $studentEmailsQueued . ' student email(s) queued. '
+                                . $studentSmsQueued . ' SMS job(s) queued. '
                                 . ($purchaserEmailQueued ? 'Purchaser confirmation queued.' : '')
                             )
                             ->success()
@@ -244,6 +250,28 @@ class OrdersTable
                         Notification::make()
                             ->title('Student enrolment emails queued')
                             ->body($enrolments->count() . ' student email(s) have been queued for resend.')
+                            ->success()
+                            ->send();
+                    }),
+
+                Action::make('resend_student_sms')
+                    ->label('Resend student SMS')
+                    ->icon('heroicon-o-chat-bubble-left-right')
+                    ->color('warning')
+                    ->visible(fn ($record) => $record->enrolments()->exists())
+                    ->requiresConfirmation()
+                    ->modalHeading('Resend student SMS')
+                    ->modalDescription('This will send or resend enrolment SMS messages to all students attached to this order.')
+                    ->action(function ($record) {
+                        $enrolments = $record->enrolments()->get();
+
+                        foreach ($enrolments as $enrolment) {
+                            SendEnrolmentSmsJob::dispatch($enrolment->id, true);
+                        }
+
+                        Notification::make()
+                            ->title('Student SMS messages queued')
+                            ->body($enrolments->count() . ' SMS message(s) have been queued.')
                             ->success()
                             ->send();
                     }),
