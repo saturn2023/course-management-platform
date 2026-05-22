@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Orders\Tables;
 
 use App\Jobs\ProcessOrderJob;
+use App\Jobs\SendEnrolmentEmailJob;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -126,6 +127,28 @@ class OrdersTable
                         Notification::make()
                             ->title('Order processing started')
                             ->body('Xero, enrolment, and email jobs have been queued.')
+                            ->success()
+                            ->send();
+                    }),
+
+                Action::make('resend_student_emails')
+                    ->label('Resend student emails')
+                    ->icon('heroicon-o-envelope')
+                    ->color('warning')
+                    ->visible(fn ($record) => $record->enrolments()->exists())
+                    ->requiresConfirmation()
+                    ->modalHeading('Resend student enrolment emails')
+                    ->modalDescription('This will resend enrolment link emails to all students attached to this order.')
+                    ->action(function ($record) {
+                        $enrolments = $record->enrolments()->get();
+
+                        foreach ($enrolments as $enrolment) {
+                            SendEnrolmentEmailJob::dispatch($enrolment->id, true);
+                        }
+
+                        Notification::make()
+                            ->title('Student enrolment emails queued')
+                            ->body($enrolments->count() . ' student email(s) have been queued for resend.')
                             ->success()
                             ->send();
                     }),

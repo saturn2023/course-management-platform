@@ -17,14 +17,15 @@ class SendEnrolmentEmailJob implements ShouldQueue
     public int $tries = 3;
 
     public function __construct(
-        public int $enrolmentId
+        public int $enrolmentId,
+        public bool $forceResend = false
     ) {}
 
     public function handle(): void
     {
         $enrolment = Enrolment::with(['order', 'student', 'course'])->findOrFail($this->enrolmentId);
 
-        if ($enrolment->email_sent_at) {
+        if ($enrolment->email_sent_at && ! $this->forceResend) {
             IntegrationLog::create([
                 'order_id' => $enrolment->order_id,
                 'service' => 'email',
@@ -68,6 +69,7 @@ class SendEnrolmentEmailJob implements ShouldQueue
                     'enrolment_id' => $enrolment->id,
                     'student_email' => $enrolment->student->email,
                     'enrolment_link' => $enrolment->enrolment_link,
+                    'force_resend' => $this->forceResend,
                 ]),
             ]);
 
@@ -90,9 +92,12 @@ class SendEnrolmentEmailJob implements ShouldQueue
                 'action' => 'send_enrolment_link',
                 'status' => 'success',
                 'response_payload' => json_encode([
-                    'message' => 'Enrolment link email sent successfully.',
+                    'message' => $this->forceResend
+                        ? 'Enrolment link email resent successfully.'
+                        : 'Enrolment link email sent successfully.',
                     'enrolment_id' => $enrolment->id,
                     'student_email' => $enrolment->student->email,
+                    'force_resend' => $this->forceResend,
                 ]),
             ]);
         } catch (Throwable $exception) {
@@ -101,6 +106,11 @@ class SendEnrolmentEmailJob implements ShouldQueue
                 'service' => 'email',
                 'action' => 'send_enrolment_link',
                 'status' => 'failed',
+                'request_payload' => json_encode([
+                    'enrolment_id' => $enrolment->id,
+                    'student_email' => $enrolment->student?->email,
+                    'force_resend' => $this->forceResend,
+                ]),
                 'error_message' => $exception->getMessage(),
             ]);
 
