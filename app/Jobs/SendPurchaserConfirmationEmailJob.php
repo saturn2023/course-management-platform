@@ -17,14 +17,15 @@ class SendPurchaserConfirmationEmailJob implements ShouldQueue
     public int $tries = 3;
 
     public function __construct(
-        public int $orderId
+        public int $orderId,
+        public bool $forceResend = false
     ) {}
 
     public function handle(): void
     {
         $order = Order::with(['students', 'items.course'])->findOrFail($this->orderId);
 
-        if ($order->purchaser_confirmation_sent_at) {
+        if ($order->purchaser_confirmation_sent_at && ! $this->forceResend) {
             IntegrationLog::create([
                 'order_id' => $order->id,
                 'service' => 'email',
@@ -69,6 +70,7 @@ class SendPurchaserConfirmationEmailJob implements ShouldQueue
                     'billing_email' => $order->billing_email,
                     'student_count' => $order->students->count(),
                     'xero_invoice_number' => $order->xero_invoice_number,
+                    'force_resend' => $this->forceResend,
                 ]),
             ]);
 
@@ -85,10 +87,13 @@ class SendPurchaserConfirmationEmailJob implements ShouldQueue
                 'action' => 'send_purchaser_confirmation',
                 'status' => 'success',
                 'response_payload' => json_encode([
-                    'message' => 'Purchaser confirmation email sent successfully.',
+                    'message' => $this->forceResend
+                        ? 'Purchaser confirmation email resent successfully.'
+                        : 'Purchaser confirmation email sent successfully.',
                     'order_id' => $order->id,
                     'billing_email' => $order->billing_email,
                     'student_count' => $order->students->count(),
+                    'force_resend' => $this->forceResend,
                 ]),
             ]);
         } catch (Throwable $exception) {
@@ -97,6 +102,11 @@ class SendPurchaserConfirmationEmailJob implements ShouldQueue
                 'service' => 'email',
                 'action' => 'send_purchaser_confirmation',
                 'status' => 'failed',
+                'request_payload' => json_encode([
+                    'order_id' => $order->id,
+                    'billing_email' => $order->billing_email,
+                    'force_resend' => $this->forceResend,
+                ]),
                 'error_message' => $exception->getMessage(),
             ]);
 

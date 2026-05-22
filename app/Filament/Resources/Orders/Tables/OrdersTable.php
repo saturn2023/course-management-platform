@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Orders\Tables;
 
 use App\Jobs\ProcessOrderJob;
 use App\Jobs\SendEnrolmentEmailJob;
+use App\Jobs\SendPurchaserConfirmationEmailJob;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -149,6 +150,24 @@ class OrdersTable
                         Notification::make()
                             ->title('Student enrolment emails queued')
                             ->body($enrolments->count() . ' student email(s) have been queued for resend.')
+                            ->success()
+                            ->send();
+                    }),
+
+                Action::make('resend_purchaser_email')
+                    ->label('Resend purchaser email')
+                    ->icon('heroicon-o-envelope-open')
+                    ->color('warning')
+                    ->visible(fn ($record) => filled($record->billing_email))
+                    ->requiresConfirmation()
+                    ->modalHeading('Resend purchaser confirmation email')
+                    ->modalDescription('This will resend the purchaser confirmation email to the billing email address.')
+                    ->action(function ($record) {
+                        SendPurchaserConfirmationEmailJob::dispatch($record->id, true);
+
+                        Notification::make()
+                            ->title('Purchaser confirmation email queued')
+                            ->body('The purchaser confirmation email has been queued for resend.')
                             ->success()
                             ->send();
                     }),
