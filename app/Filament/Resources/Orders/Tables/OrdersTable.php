@@ -17,64 +17,99 @@ class OrdersTable
     {
         return $table
             ->columns([
-                TextColumn::make('student.id')
-                    ->label('Student')
+                TextColumn::make('id')
+                    ->label('Order ID')
+                    ->sortable()
                     ->searchable(),
 
+                TextColumn::make('billing_company')
+                    ->label('Company')
+                    ->searchable()
+                    ->placeholder('-'),
+
+                TextColumn::make('billing_email')
+                    ->label('Billing email')
+                    ->searchable()
+                    ->copyable()
+                    ->placeholder('-'),
+
+                TextColumn::make('students_count')
+                    ->label('Students')
+                    ->counts('students')
+                    ->sortable(),
+
                 TextColumn::make('subtotal')
-                    ->numeric()
+                    ->label('Subtotal')
+                    ->money('AUD')
                     ->sortable(),
 
                 TextColumn::make('total')
-                    ->numeric()
+                    ->label('Total')
+                    ->money('AUD')
                     ->sortable(),
 
                 TextColumn::make('status')
+                    ->label('Order status')
+                    ->badge()
                     ->searchable(),
 
                 TextColumn::make('xero_status')
-                    ->label('Xero status')
+                    ->label('Xero')
                     ->badge()
                     ->searchable(),
 
                 TextColumn::make('enrolment_status')
-                    ->label('Enrolment status')
+                    ->label('Enrolment')
                     ->badge()
                     ->searchable(),
+
+                TextColumn::make('xero_invoice_number')
+                    ->label('Xero invoice')
+                    ->searchable()
+                    ->copyable()
+                    ->placeholder('Not created'),
+
+                TextColumn::make('purchaser_confirmation_sent_at')
+                    ->label('Purchaser email')
+                    ->dateTime()
+                    ->sortable()
+                    ->placeholder('Not sent'),
+
+                TextColumn::make('xero_sent_at')
+                    ->label('Sent to Xero')
+                    ->dateTime()
+                    ->sortable()
+                    ->placeholder('Not sent')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('xero_invoice_id')
                     ->label('Xero invoice ID')
                     ->limit(12)
                     ->copyable()
                     ->tooltip(fn ($record) => $record->xero_invoice_id)
-                    ->searchable(),
-
-                TextColumn::make('xero_invoice_number')
-                    ->label('Xero invoice number')
-                    ->searchable(),
-
-                TextColumn::make('xero_sent_at')
-                    ->label('Sent to Xero')
-                    ->dateTime()
-                    ->sortable()
-                    ->placeholder('Not sent'),
-
-                TextColumn::make('xero_error_message')
-                    ->label('Xero Error')
-                    ->limit(40)
-                    ->wrap()
-                    ->placeholder('-'),
-
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
+                    ->searchable()
+                    ->placeholder('-')
                     ->toggleable(isToggledHiddenByDefault: true),
 
+                TextColumn::make('xero_error_message')
+                    ->label('Xero error')
+                    ->limit(40)
+                    ->wrap()
+                    ->placeholder('-')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('created_at')
+                    ->label('Created')
+                    ->dateTime()
+                    ->sortable(),
+
                 TextColumn::make('updated_at')
+                    ->label('Updated')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->defaultSort('id', 'desc')
             ->filters([
                 //
             ])
@@ -90,7 +125,7 @@ class OrdersTable
 
                         Notification::make()
                             ->title('Order processing started')
-                            ->body('Xero and enrolment jobs have been queued.')
+                            ->body('Xero, enrolment, and email jobs have been queued.')
                             ->success()
                             ->send();
                     }),
