@@ -141,30 +141,63 @@ class OrdersTable
                         && (
                             $record->xero_status === 'failed'
                             || $record->enrolment_status === 'failed'
+                            || $record->enrolment_status === 'link_created'
                         )
                     )
                     ->requiresConfirmation()
-                    ->modalHeading('Retry failed order processing')
-                    ->modalDescription('This will retry processing for this order. Existing successful steps should be skipped by duplicate protection.')
+                    ->modalHeading('Retry failed or incomplete order processing')
+                    ->modalDescription('This will retry the incomplete parts of the order. Existing successful steps should be skipped by duplicate protection.')
                     ->action(function ($record) {
+                        $record->refresh();
+
+                        $enrolments = $record->enrolments()->get();
+
+                        $shouldRunFullProcess = false;
+                        $studentEmailsQueued = 0;
+                        $purchaserEmailQueued = false;
+
                         if ($record->xero_status === 'failed' && blank($record->xero_invoice_id)) {
                             $record->update([
                                 'xero_status' => 'pending',
                                 'xero_error_message' => null,
                             ]);
+
+                            $shouldRunFullProcess = true;
                         }
 
                         if ($record->enrolment_status === 'failed') {
                             $record->update([
                                 'enrolment_status' => 'pending',
                             ]);
+
+                            if ($enrolments->isEmpty()) {
+                                $shouldRunFullProcess = true;
+                            }
                         }
 
-                        ProcessOrderJob::dispatch($record->id);
+                        if ($enrolments->isNotEmpty()) {
+                            foreach ($enrolments as $enrolment) {
+                                SendEnrolmentEmailJob::dispatch($enrolment->id, true);
+                                $studentEmailsQueued++;
+                            }
+
+                            if (filled($record->billing_email)) {
+                                SendPurchaserConfirmationEmailJob::dispatch($record->id, true);
+                                $purchaserEmailQueued = true;
+                            }
+                        }
+
+                        if ($shouldRunFullProcess || $enrolments->isEmpty()) {
+                            ProcessOrderJob::dispatch($record->id);
+                        }
 
                         Notification::make()
                             ->title('Retry started')
-                            ->body('The failed order processing jobs have been queued again.')
+                            ->body(
+                                'Retry jobs have been queued. '
+                                . $studentEmailsQueued . ' student email(s) queued. '
+                                . ($purchaserEmailQueued ? 'Purchaser confirmation queued.' : '')
+                            )
                             ->success()
                             ->send();
                     }),
