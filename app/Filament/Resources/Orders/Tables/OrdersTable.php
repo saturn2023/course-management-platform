@@ -53,16 +53,40 @@ class OrdersTable
                 TextColumn::make('status')
                     ->label('Order status')
                     ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'paid' => 'success',
+                        'pending' => 'gray',
+                        'cancelled' => 'danger',
+                        default => 'gray',
+                    })
                     ->searchable(),
 
                 TextColumn::make('xero_status')
                     ->label('Xero')
                     ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'success' => 'success',
+                        'processing' => 'warning',
+                        'pending' => 'gray',
+                        'failed' => 'danger',
+                        'skipped' => 'gray',
+                        default => 'gray',
+                    })
                     ->searchable(),
 
                 TextColumn::make('enrolment_status')
                     ->label('Enrolment')
                     ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'link_sent' => 'success',
+                        'completed' => 'success',
+                        'link_created' => 'warning',
+                        'processing' => 'warning',
+                        'pending' => 'gray',
+                        'failed' => 'danger',
+                        'skipped' => 'gray',
+                        default => 'gray',
+                    })
                     ->searchable(),
 
                 TextColumn::make('xero_invoice_number')
