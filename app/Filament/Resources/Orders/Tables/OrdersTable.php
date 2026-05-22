@@ -132,6 +132,43 @@ class OrdersTable
                             ->send();
                     }),
 
+                Action::make('retry_order')
+                    ->label('Retry Order')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('danger')
+                    ->visible(fn ($record) =>
+                        $record->status === 'paid'
+                        && (
+                            $record->xero_status === 'failed'
+                            || $record->enrolment_status === 'failed'
+                        )
+                    )
+                    ->requiresConfirmation()
+                    ->modalHeading('Retry failed order processing')
+                    ->modalDescription('This will retry processing for this order. Existing successful steps should be skipped by duplicate protection.')
+                    ->action(function ($record) {
+                        if ($record->xero_status === 'failed' && blank($record->xero_invoice_id)) {
+                            $record->update([
+                                'xero_status' => 'pending',
+                                'xero_error_message' => null,
+                            ]);
+                        }
+
+                        if ($record->enrolment_status === 'failed') {
+                            $record->update([
+                                'enrolment_status' => 'pending',
+                            ]);
+                        }
+
+                        ProcessOrderJob::dispatch($record->id);
+
+                        Notification::make()
+                            ->title('Retry started')
+                            ->body('The failed order processing jobs have been queued again.')
+                            ->success()
+                            ->send();
+                    }),
+
                 Action::make('resend_student_emails')
                     ->label('Resend student emails')
                     ->icon('heroicon-o-envelope')
