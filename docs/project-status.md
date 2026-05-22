@@ -1,147 +1,97 @@
-# Course Management Platform — Project Status
+## Latest progress update
 
-## Current goal
+### Completed backend/admin reliability work
 
-Build a Laravel-based replacement for the AMS Training WordPress/WooCommerce/Zapier flow.
+The Laravel admin backend now has a more usable Orders table.
 
-The system should support:
+Orders table now shows:
 
-- Course pages and checkout later
-- Admin manual orders
-- Pin Payments later
-- Xero invoice creation
-- Enrolment link creation
-- Student enrolment emails
-- Purchaser confirmation emails
-- SMS/Twilio later
-- Admin monitoring and retry/resend actions
+- Order ID
+- Company
+- Billing email
+- Student count
+- Subtotal
+- Total
+- Order status
+- Xero status
+- Enrolment status
+- Xero invoice number
+- Purchaser email sent status
+- Created date
 
-## Current confirmed backend flow
+Status badges now use colours:
 
-Manual admin order flow is working:
+- Green for successful/paid/link_sent
+- Grey for pending/skipped
+- Yellow for processing/link_created
+- Red for failed/cancelled
 
-1. Admin creates order in Filament
-2. Billing details are stored on order
-3. Multiple students can be attached to one order
-4. Order items are attached
-5. Admin clicks Process Order
-6. Laravel creates real Xero draft invoice
-7. Laravel creates one enrolment link per student
-8. Laravel sends/logs one enrolment email per student
-9. Laravel sends/logs purchaser confirmation email to billing email
-10. Integration logs record processing/success/failure/queued/skipped statuses
+### Admin recovery actions completed
 
-## Important confirmed Xero proof
+The Orders table now includes admin actions for:
 
-Laravel successfully connects to Xero using OAuth.
+- Process Order
+- Retry Order
+- Resend student enrolment emails
+- Resend purchaser confirmation email
+- View invoice in Xero
+- Edit order
 
-Working pieces:
+The retry action was improved so that if an order is stuck at `link_created`, it can force-resend existing enrolment emails and purchaser confirmation instead of requiring Tinker.
 
-- Xero OAuth connect route
-- Xero callback route
-- XeroConnection table stores tenant/token details
-- CreateXeroInvoiceJob creates real draft invoices
-- Xero invoice ID and invoice number are saved on orders
-- Duplicate Xero invoice creation is prevented
+### Real SMTP completed
 
-Confirmed real Xero invoice examples:
+Real SMTP email sending is now working through SMTP2GO.
 
-- 18034
-- 18042
-- 18048
+Confirmed working:
 
-## Current important models
+- Raw Laravel SMTP test email
+- Student enrolment email through the real order flow
+- Purchaser confirmation email through the real order flow
+- Resend student emails
+- Resend purchaser confirmation email
 
-- Course
-- Student
-- Order
-- OrderItem
-- OrderStudent
-- Enrolment
-- XeroConnection
-- IntegrationLog
+Local `.env` uses SMTP2GO settings.
 
-## Current important jobs
+Important: `.env` must never be committed to Git.
 
-- ProcessOrderJob
-- CreateXeroInvoiceJob
-- CreateEnrolmentJob
-- SendEnrolmentEmailJob
-- SendPurchaserConfirmationEmailJob
+### Security checkpoint completed
 
-## Current important mail classes
+After accidentally exposing old secrets, the SMTP/Xero secrets were rotated.
 
-- EnrolmentLinkMail
-- PurchaserConfirmationMail
+Confirmed:
 
-## Current important routes
+- New SMTP2GO credentials work
+- New Xero secret works
+- Laravel can still send real emails
+- Laravel can still create Xero invoices
+- Git working tree is clean
+- `.env` is not committed
 
-- /admin
-- /xero/connect
-- /xero/callback
+### Current confirmed backend flow
 
-## Current email setup
+1. Admin creates an order
+2. Admin adds billing details
+3. Admin attaches one or more students
+4. Admin adds order items
+5. Admin marks order as paid
+6. Admin clicks Process Order
+7. Laravel creates a real Xero draft invoice
+8. Laravel creates one enrolment link per student
+9. Laravel sends real student enrolment emails through SMTP2GO
+10. Laravel sends real purchaser confirmation email through SMTP2GO
+11. Admin can resend student emails
+12. Admin can resend purchaser confirmation email
+13. Admin can retry failed or incomplete order processing
 
-Local testing uses:
+### Next planned tasks
 
-MAIL_MAILER=log
+Recommended next tasks:
 
-Emails are written to:
-
-storage/logs/laravel.log
-
-Search for:
-
-- AMS Registration Form Student to complete
-- AMS Training Registered Students
-
-## Current admin flow
-
-Filament admin is used for manual testing and will remain in final system.
-
-Admin can:
-
-- Create courses
-- Create students
-- Create orders
-- Add billing details
-- Add multiple students to order
-- Add order items
-- Process order
-- View integration logs
-- View enrolments
-
-## Current business flow
-
-Final intended public flow:
-
-1. Student visits course page
-2. Student clicks Enrol Now
-3. Student goes to checkout
-4. Student enters quantity
-5. Student details fields appear based on quantity
-6. Purchaser/billing details are entered
-7. Payment is made using Pin Payments
-8. Order becomes paid
-9. ProcessOrderJob runs automatically
-10. Xero invoice is created
-11. Enrolment links are created
-12. Student emails are sent
-13. Purchaser confirmation email is sent
-
-## Current limitation
-
-Subtotal and total are still manually entered in admin.
-Later they should be auto-calculated from order items.
-
-## Next planned tasks
-
-1. Clean Orders table columns
-2. Add resend student enrolment email button
-3. Add resend purchaser confirmation email button
-4. Improve retry logic for failed jobs
-5. Add Twilio SMS job
-6. Replace fake example.com enrolment links with real AMS enrolment link logic
-7. Real SMTP/email provider
-8. Public course pages and checkout
-9. Pin Payments integration
+1. Twilio SMS job
+2. Secure real enrolment link/token flow
+3. Replace fake `example.com/enrolment/...` links
+4. Improve admin form safety
+5. Auto-calculate or validate subtotal/total
+6. Public course page and checkout planning
+7. Pin Payments integration later
