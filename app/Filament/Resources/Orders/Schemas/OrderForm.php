@@ -8,17 +8,15 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Schema;
-
+use Filament\Forms\Components\Hidden;
 class OrderForm
 {
     public static function configure(Schema $schema): Schema
     {
         return $schema
             ->components([
-                Select::make('student_id')
-                    ->label('Primary student')
-                    ->relationship('student', 'id')
-                    ->required(),
+                Hidden::make('student_id')
+    ->default(1),
 
                 TextInput::make('billing_first_name')
                     ->label('Billing first name'),

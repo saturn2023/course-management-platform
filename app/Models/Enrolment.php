@@ -13,6 +13,9 @@ class Enrolment extends Model
         'course_id',
         'external_enrolment_id',
         'enrolment_link',
+        'enrolment_token',
+        'enrolment_token_expires_at',
+        'enrolment_completed_at',
         'status',
         'error_message',
         'request_payload',
@@ -20,13 +23,19 @@ class Enrolment extends Model
         'email_sent_at',
         'link_sent_at',
         'sms_sent_at',
-         'sms_error_message',
+        'sms_error_message',
+        'secret_key',
+   'secret_base_url',
     ];
+
     protected $casts = [
-    'email_sent_at' => 'datetime',
-    'link_sent_at' => 'datetime',
-    'sms_sent_at' => 'datetime',
-];
+        'email_sent_at' => 'datetime',
+        'link_sent_at' => 'datetime',
+        'sms_sent_at' => 'datetime',
+        'enrolment_token_expires_at' => 'datetime',
+        'enrolment_completed_at' => 'datetime',
+    ];
+
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);

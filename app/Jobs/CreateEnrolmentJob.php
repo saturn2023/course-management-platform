@@ -52,8 +52,6 @@ class CreateEnrolmentJob implements ShouldQueue
 
         $students = $order->students;
 
-        // Temporary fallback while transitioning from one-student orders
-        // to multiple-student orders.
         if ($students->isEmpty() && $order->student) {
             $students = collect([$order->student]);
         }
@@ -137,6 +135,8 @@ class CreateEnrolmentJob implements ShouldQueue
                             'existing_enrolment_id' => $existingEnrolment->id,
                             'existing_external_enrolment_id' => $existingEnrolment->external_enrolment_id,
                             'existing_enrolment_link' => $existingEnrolment->enrolment_link,
+                            'existing_enrolment_token' => $existingEnrolment->enrolment_token,
+                            'existing_secret_base_url' => $existingEnrolment->secret_base_url,
                             'email_sent_at' => $existingEnrolment->email_sent_at,
                         ]),
                         'response_payload' => json_encode([
@@ -165,24 +165,39 @@ class CreateEnrolmentJob implements ShouldQueue
                     continue;
                 }
 
-                // Fake enrolment link API response for now.
-                // Later this will be replaced with the real AMS enrolment link API call.
                 $externalEnrolmentId = 'ENR-' . Str::upper(Str::random(10));
 
-                $enrolmentLink = 'https://example.com/enrolment/' . $externalEnrolmentId;
+                $enrolmentToken = $this->generateUniqueEnrolmentToken();
+
+                $secretKey = $this->generateUniqueSecretKey();
+
+                $secretBaseUrl = $this->buildSecretBaseUrl($firstItem);
+
+                $enrolmentLink = url('/enrol/' . $enrolmentToken);
 
                 $enrolment = Enrolment::create([
                     'order_id' => $order->id,
                     'student_id' => $student->id,
                     'course_id' => $firstItem?->course_id,
                     'external_enrolment_id' => $externalEnrolmentId,
+
+                    // Short secure Laravel link sent to student.
                     'enrolment_link' => $enrolmentLink,
+                    'enrolment_token' => $enrolmentToken,
+                    'enrolment_token_expires_at' => now()->addDays(30),
+
+                    // Final AMS form redirect data.
+                    'secret_key' => $secretKey,
+                    'secret_base_url' => $secretBaseUrl,
+
                     'status' => 'link_created',
                     'request_payload' => json_encode($payload),
                     'response_payload' => json_encode([
                         'external_enrolment_id' => $externalEnrolmentId,
                         'enrolment_link' => $enrolmentLink,
-                        'message' => 'Fake enrolment link created successfully.',
+                        'secret_base_url' => $secretBaseUrl,
+                        'enrolment_token_expires_at' => now()->addDays(30)->toDateTimeString(),
+                        'message' => 'Secure enrolment redirect link created successfully.',
                     ]),
                 ]);
 
@@ -199,7 +214,9 @@ class CreateEnrolmentJob implements ShouldQueue
                         'student_id' => $student->id,
                         'external_enrolment_id' => $externalEnrolmentId,
                         'enrolment_link' => $enrolmentLink,
-                        'message' => 'Fake enrolment link created successfully.',
+                        'secret_base_url' => $secretBaseUrl,
+                        'enrolment_token_expires_at' => $enrolment->enrolment_token_expires_at?->toDateTimeString(),
+                        'message' => 'Secure enrolment redirect link created successfully.',
                     ]),
                 ]);
 
@@ -215,7 +232,7 @@ class CreateEnrolmentJob implements ShouldQueue
                         'enrolment_id' => $enrolment->id,
                         'student_id' => $student->id,
                         'student_email' => $student->email,
-                        'message' => 'Email job queued after enrolment link was created.',
+                        'message' => 'Email job queued after secure enrolment redirect link was created.',
                     ]),
                 ]);
             }
@@ -230,7 +247,7 @@ class CreateEnrolmentJob implements ShouldQueue
                 'action' => 'create_enrolment_links',
                 'status' => 'success',
                 'response_payload' => json_encode([
-                    'message' => 'Enrolment link processing completed for order students.',
+                    'message' => 'Secure enrolment redirect link processing completed for order students.',
                     'student_count' => $students->count(),
                     'created_count' => $createdCount,
                     'skipped_count' => $skippedCount,
@@ -266,5 +283,41 @@ class CreateEnrolmentJob implements ShouldQueue
 
             throw $exception;
         }
+    }
+
+    private function generateUniqueEnrolmentToken(): string
+    {
+        do {
+            $token = Str::random(64);
+        } while (Enrolment::where('enrolment_token', $token)->exists());
+
+        return $token;
+    }
+
+    private function generateUniqueSecretKey(): string
+    {
+        do {
+            $secretKey = hash('sha256', Str::random(80) . microtime(true));
+        } while (Enrolment::where('secret_key', $secretKey)->exists());
+
+        return $secretKey;
+    }
+
+    private function buildSecretBaseUrl($firstItem): string
+    {
+        $baseUrl = env('AMS_ENROLMENT_FORM_URL', 'https://amstraining.com.au/new-updated-enrolments/');
+
+        $query = http_build_query([
+            // For now this uses course_id as fallback.
+            // Later we can map each course to the exact AMS code/plan values.
+            'code' => $firstItem?->course?->enrolment_code
+                ?? $firstItem?->course?->code
+                ?? $firstItem?->course_id,
+
+            'plan' => $firstItem?->course?->plan_id ?? '',
+            'schedule' => '',
+        ]);
+
+        return rtrim($baseUrl, '/') . '/?' . $query;
     }
 }
