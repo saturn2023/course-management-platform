@@ -303,21 +303,18 @@ class CreateEnrolmentJob implements ShouldQueue
         return $secretKey;
     }
 
-    private function buildSecretBaseUrl($firstItem): string
-    {
-        $baseUrl = env('AMS_ENROLMENT_FORM_URL', 'https://amstraining.com.au/new-updated-enrolments/');
+private function buildSecretBaseUrl($firstItem): string
+{
+    $baseUrl = env('AMS_ENROLMENT_FORM_URL', url('/registration-form'));
 
-        $query = http_build_query([
-            // For now this uses course_id as fallback.
-            // Later we can map each course to the exact AMS code/plan values.
-            'code' => $firstItem?->course?->enrolment_code
-                ?? $firstItem?->course?->code
-                ?? $firstItem?->course_id,
+    $query = http_build_query([
+        'code' => $firstItem?->course?->enrolment_code
+            ?? $firstItem?->course?->code
+            ?? $firstItem?->course_id,
 
-            'plan' => $firstItem?->course?->plan_id ?? '',
-            'schedule' => '',
-        ]);
+        'plan' => $firstItem?->course?->plan_id ?? '',
+    ]);
 
-        return rtrim($baseUrl, '/') . '/?' . $query;
-    }
+    return rtrim($baseUrl, '/') . '/?' . $query;
+}
 }

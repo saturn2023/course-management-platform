@@ -16,7 +16,7 @@ class OrderForm
         return $schema
             ->components([
                 Hidden::make('student_id')
-    ->default(1),
+    ->default(null),
 
                 TextInput::make('billing_first_name')
                     ->label('Billing first name'),
