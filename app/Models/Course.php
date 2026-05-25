@@ -14,6 +14,8 @@ class Course extends Model
         'description',
         'price',
         'status',
+        'ams_enrolment_code',
+         'ams_plan_id',
     ];
 
     public function orderItems(): HasMany

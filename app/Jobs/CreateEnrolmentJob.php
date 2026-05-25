@@ -308,11 +308,11 @@ private function buildSecretBaseUrl($firstItem): string
     $baseUrl = env('AMS_ENROLMENT_FORM_URL', url('/registration-form'));
 
     $query = http_build_query([
-        'code' => $firstItem?->course?->enrolment_code
+        'code' => $firstItem?->course?->ams_enrolment_code
             ?? $firstItem?->course?->code
             ?? $firstItem?->course_id,
 
-        'plan' => $firstItem?->course?->plan_id ?? '',
+        'plan' => $firstItem?->course?->ams_plan_id ?? '',
     ]);
 
     return rtrim($baseUrl, '/') . '/?' . $query;

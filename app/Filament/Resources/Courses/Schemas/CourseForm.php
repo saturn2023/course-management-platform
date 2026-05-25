@@ -15,9 +15,23 @@ class CourseForm
                 TextInput::make('title')
                     ->required(),
                 TextInput::make('code')
-                    ->default(null),
-                TextInput::make('slug')
-                    ->required(),
+    ->label('Course code')
+    ->default(null),
+
+TextInput::make('ams_enrolment_code')
+    ->label('AMS enrolment code')
+    ->helperText('Example: 32 from the current AMS enrol URL.')
+    ->maxLength(50)
+    ->default(null),
+
+TextInput::make('ams_plan_id')
+    ->label('AMS plan ID')
+    ->helperText('Example: 38 from the current AMS enrol URL.')
+    ->maxLength(50)
+    ->default(null),
+
+TextInput::make('slug')
+    ->required(),
                 Textarea::make('description')
                     ->default(null)
                     ->columnSpanFull(),
