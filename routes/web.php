@@ -197,7 +197,7 @@ Route::post('/enrol/{token}', function (Request $request, string $token) {
     | File uploads
     |--------------------------------------------------------------------------
     |
-    | Claude's old form may use either named upload fields:
+    | The form may use either named upload fields:
     | id_document / vet_transcript
     |
     | Or old WordPress style:
@@ -266,15 +266,9 @@ Route::post('/enrol/{token}', function (Request $request, string $token) {
 })->name('enrol.submit');
 
 Route::get('/enrolment-completed', function () {
-    return response(
-        'Your registration has been completed successfully. This enrolment link can no longer be used.',
-        200
-    );
+    return view('enrolments.completed');
 })->name('enrolment.completed');
 
 Route::get('/enrolment-not-successful', function () {
-    return response(
-        'Enrolment link is invalid, expired, or already completed. Please contact AMS Training.',
-        404
-    );
+    return response()->view('enrolments.failed', [], 404);
 })->name('enrolment.failed');
