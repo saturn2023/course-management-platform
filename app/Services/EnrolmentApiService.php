@@ -247,30 +247,44 @@ class EnrolmentApiService
         return $args;
     }
 
-    protected function callEnrol(array $args): array
-    {
-        $body = [
-            'public_key' => $this->config()['public_key'],
-            'subdomain' => $this->config()['subdomain'],
-            'values' => http_build_query($args),
-        ];
+   protected function callEnrol(array $args): array
+{
+    $body = [
+        'public_key' => $this->config()['public_key'],
+        'subdomain' => $this->config()['subdomain'],
+        'values' => http_build_query($args),
+    ];
 
-        $response = $this->client()->post($this->endpoint('enrol'), $body);
+    $response = $this->client()->post($this->endpoint('enrol'), $body);
 
-        if (! $response->successful()) {
-            throw new RuntimeException(
-                'RTO enrol API /enrol HTTP ' . $response->status() . ': ' . $response->body()
-            );
-        }
+    $rawBody = $response->body();
 
-        $json = $response->json();
-
-        if (! is_array($json)) {
-            throw new RuntimeException('RTO enrol API /enrol returned non-JSON: ' . $response->body());
-        }
-
-        return $json;
+    if (! $response->successful()) {
+        throw new RuntimeException(
+            'RTO enrol API /enrol HTTP failure. Status: '
+            . $response->status()
+            . ' Body: '
+            . ($rawBody !== '' ? $rawBody : '[empty body]')
+            . ' Headers: '
+            . json_encode($response->headers())
+        );
     }
+
+    $json = $response->json();
+
+    if (! is_array($json)) {
+        throw new RuntimeException(
+            'RTO enrol API /enrol returned non-JSON. Status: '
+            . $response->status()
+            . ' Body: '
+            . ($rawBody !== '' ? $rawBody : '[empty body]')
+            . ' Headers: '
+            . json_encode($response->headers())
+        );
+    }
+
+    return $json;
+}
 
     protected function callReceive(string|int $externalEnrolmentId, string $relativePath): array
     {
@@ -339,9 +353,16 @@ class EnrolmentApiService
         }
 
         return Http::withHeaders($headers)
-            ->timeout($config['timeout'])
-            ->connectTimeout($config['connect_timeout'])
-            ->acceptJson();
+    ->timeout($config['timeout'])
+    ->connectTimeout($config['connect_timeout'])
+    ->acceptJson()
+    ->withOptions([
+        'allow_redirects' => true,
+        'curl' => [
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_POSTREDIR => 3,
+        ],
+    ]);
     }
 
     protected function endpoint(string $endpoint): string
