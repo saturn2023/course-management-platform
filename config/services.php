@@ -39,4 +39,13 @@ return [
     'client_secret' => env('XERO_CLIENT_SECRET'),
     'redirect_uri' => env('XERO_REDIRECT_URI'),
 ],
+'enrolment_api' => [
+    'enabled' => env('ENROLMENT_API_ENABLED', false),
+    'base_url' => env('ENROLMENT_API_BASE_URL'),
+    'public_key' => env('ENROLMENT_API_PUBLIC_KEY'),
+    'subdomain' => env('ENROLMENT_API_SUBDOMAIN', 'amstraining'),
+    'origin' => env('ENROLMENT_API_ORIGIN', config('app.url')),
+    'timeout' => env('ENROLMENT_API_TIMEOUT', 30),
+    'connect_timeout' => env('ENROLMENT_API_CONNECT_TIMEOUT', 10),
+],
 ];
