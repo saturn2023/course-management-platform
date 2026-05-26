@@ -18,11 +18,23 @@ class EnrolmentSubmission extends Model
         'id_document_path',
         'vet_transcript_path',
         'submitted_at',
+        'api_status',
+'api_attempts',
+'api_last_attempted_at',
+'api_submitted_at',
+'api_error_message',
+'api_request_payload',
+'api_response_payload',
+'external_reference',
     ];
 
     protected $casts = [
         'form_data' => 'array',
         'submitted_at' => 'datetime',
+        'api_last_attempted_at' => 'datetime',
+'api_submitted_at' => 'datetime',
+'api_request_payload' => 'array',
+'api_response_payload' => 'array',
     ];
 
     public function enrolment(): BelongsTo

@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\SubmitEnrolmentToApiJob;
 use App\Models\Enrolment;
 use App\Models\EnrolmentSubmission;
 use Illuminate\Http\Request;
@@ -239,7 +240,17 @@ Route::post('/enrol/{token}', function (Request $request, string $token) {
         $validated['uploaded_documents'] = $additionalDocumentPaths;
     }
 
-    EnrolmentSubmission::create([
+    /*
+    |--------------------------------------------------------------------------
+    | Save submission
+    |--------------------------------------------------------------------------
+    |
+    | The enrolment form data is saved first. Then a queued job handles
+    | submission to the external enrolment API.
+    |
+    */
+
+    $submission = EnrolmentSubmission::create([
         'enrolment_id' => $enrolment->id,
         'order_id' => $enrolment->order_id,
         'student_id' => $enrolment->student_id,
@@ -250,7 +261,10 @@ Route::post('/enrol/{token}', function (Request $request, string $token) {
         'id_document_path' => $idDocumentPath,
         'vet_transcript_path' => $vetTranscriptPath,
         'submitted_at' => now(),
+        'api_status' => 'pending',
     ]);
+
+    SubmitEnrolmentToApiJob::dispatch($submission->id);
 
     $enrolment->update([
         'status' => 'completed',
@@ -258,6 +272,8 @@ Route::post('/enrol/{token}', function (Request $request, string $token) {
         'response_payload' => json_encode([
             'message' => 'Student completed Laravel registration form.',
             'submission_saved' => true,
+            'api_job_queued' => true,
+            'submission_id' => $submission->id,
             'submitted_at' => now()->toDateTimeString(),
         ]),
     ]);

@@ -47,7 +47,21 @@ class EnrolmentSubmissionsTable
                     ->label('Plan')
                     ->badge()
                     ->searchable(),
+                 TextColumn::make('api_status')
+    ->label('API Status')
+    ->badge()
+    ->sortable()
+    ->searchable(),
 
+TextColumn::make('api_attempts')
+    ->label('API Attempts')
+    ->sortable(),
+
+TextColumn::make('api_error_message')
+    ->label('API Error')
+    ->limit(40)
+    ->placeholder('No error')
+    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('submitted_at')
                     ->label('Submitted')
                     ->dateTime()

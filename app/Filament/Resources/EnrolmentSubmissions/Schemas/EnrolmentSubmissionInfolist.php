@@ -56,7 +56,36 @@ class EnrolmentSubmissionInfolist
                             ->copyable(),
                     ])
                     ->columns(1),
+                 Section::make('API Submission Status')
+    ->schema([
+        TextEntry::make('api_status')
+            ->label('API Status')
+            ->badge(),
 
+        TextEntry::make('api_attempts')
+            ->label('API Attempts'),
+
+        TextEntry::make('api_last_attempted_at')
+            ->label('Last attempted at')
+            ->dateTime()
+            ->placeholder('Not attempted'),
+
+        TextEntry::make('api_submitted_at')
+            ->label('Submitted to API at')
+            ->dateTime()
+            ->placeholder('Not submitted'),
+
+        TextEntry::make('api_error_message')
+            ->label('API Error')
+            ->placeholder('No error')
+            ->copyable(),
+
+        TextEntry::make('external_reference')
+            ->label('External Reference')
+            ->placeholder('Not available')
+            ->copyable(),
+    ])
+    ->columns(2),
                 Section::make('Submitted Form Data')
                     ->schema([
                         TextEntry::make('form_data')
