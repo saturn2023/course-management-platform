@@ -5,7 +5,25 @@ use App\Models\Enrolment;
 use App\Models\EnrolmentSubmission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\CheckoutLoadController;
 
+
+Route::get('/checkout/load', CheckoutLoadController::class)
+    ->middleware('throttle:30,1')
+    ->name('checkout.load');
+
+Route::get('/checkout/{checkoutSession:uuid}', [CheckoutController::class, 'show'])
+    ->name('checkout.show');
+
+Route::patch('/checkout/{checkoutSession:uuid}/quantity', [CheckoutController::class, 'updateQuantity'])
+    ->name('checkout.quantity.update');
+Route::get('/checkout/load', CheckoutLoadController::class)
+    ->middleware('throttle:30,1')
+    ->name('checkout.load');
+
+Route::get('/checkout/{checkoutSession:uuid}', [CheckoutController::class, 'show'])
+    ->name('checkout.show');
 Route::get('/', function () {
     return view('welcome');
 });

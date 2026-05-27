@@ -3,195 +3,632 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Checkout — {{ $session->course_title }}</title>
-
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Registration — {{ $session->course_title }}</title>
     <style>
+        :root {
+            --ams-navy: #1a2d5a;
+            --ams-red: #d6202c;
+            --ams-green: #7cb342;
+            --ams-green-hover: #6aa033;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --border: #e5e7eb;
+            --bg: #ffffff;
+            --page-bg: #f7f7f8;
+            --divider-green: #b3d68c;
+        }
+
+        * { box-sizing: border-box; }
+
         body {
-            font-family: Arial, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #f4f4f4;
-            color: #223A74;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: var(--page-bg);
+            color: var(--text);
             margin: 0;
-            padding: 2rem;
+            padding: 2rem 1rem;
+            line-height: 1.5;
         }
 
         .container {
-            max-width: 820px;
-            margin: 2rem auto;
+            max-width: 900px;
+            margin: 0 auto;
         }
 
+        h1.page-title {
+            text-align: center;
+            color: var(--ams-navy);
+            font-size: 2rem;
+            margin: 0 0 1.5rem;
+        }
+
+        .intro {
+            color: var(--ams-navy);
+            margin-bottom: 1.5rem;
+        }
+
+        .intro p { margin: 0 0 1rem; }
+
+        .divider {
+            border: 0;
+            border-top: 2px solid var(--divider-green);
+            margin: 1.5rem 0;
+        }
+
+        .company-note {
+            color: var(--ams-red);
+            font-weight: 600;
+            margin-bottom: 2rem;
+        }
+
+        /* Product / quantity row */
+        .product-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1.5fr 1fr;
+            gap: 1rem;
+            align-items: center;
+            padding: 1rem;
+            background: #f3f4f6;
+            border-radius: 4px;
+            margin-bottom: 2.5rem;
+        }
+
+        .product-row .header {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .product-row .header-row {
+            display: contents;
+        }
+
+        .product-name {
+            color: var(--ams-navy);
+            font-weight: 600;
+        }
+
+        .quantity-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border);
+            background: #fff;
+            border-radius: 4px;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        .quantity-control button {
+            background: transparent;
+            border: 0;
+            width: 36px;
+            height: 36px;
+            font-size: 1.2rem;
+            color: var(--ams-navy);
+            cursor: pointer;
+        }
+
+        .quantity-control button:hover:not(:disabled) {
+            background: #f3f4f6;
+        }
+
+        .quantity-control button:disabled {
+            color: #cbd5e1;
+            cursor: not-allowed;
+        }
+
+        .quantity-control input {
+            width: 50px;
+            text-align: center;
+            border: 0;
+            border-left: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            height: 36px;
+            font-size: 1rem;
+            -moz-appearance: textfield;
+        }
+
+        .quantity-control input::-webkit-outer-spin-button,
+        .quantity-control input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Card sections */
         .card {
-            background: #ffffff;
-            border-radius: 8px;
-            border: 1px solid #dddddd;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
             padding: 2rem;
             margin-bottom: 1.5rem;
         }
 
-        h1 {
-            font-size: 1.7rem;
-            margin: 0 0 0.35rem;
-            color: #223A74;
-        }
-
-        h2 {
-            font-size: 0.95rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #666666;
-            margin: 0 0 1rem;
-        }
-
-        .course-code {
-            color: #666666;
-            margin: 0.25rem 0 1.5rem;
-        }
-
-        dl {
-            display: grid;
-            grid-template-columns: 180px 1fr;
-            gap: 0.65rem 1rem;
-            margin: 0;
-        }
-
-        dt {
-            color: #666666;
+        .card h2 {
+            color: var(--ams-navy);
+            font-size: 1.5rem;
+            margin: 0 0 1.5rem;
             font-weight: 600;
         }
 
-        dd {
-            margin: 0;
-            color: #333333;
+        .card h3 {
+            color: var(--ams-navy);
+            font-weight: 700;
+            font-size: 0.95rem;
+            margin: 0 0 1.5rem;
         }
 
-        .totals {
-            border-top: 1px solid #dddddd;
-            margin-top: 1.25rem;
-            padding-top: 1.25rem;
-            font-size: 1.1rem;
-            color: #333333;
+        .field {
+            margin-bottom: 1.5rem;
         }
 
-        .totals strong {
-            font-size: 1.35rem;
-            color: #223A74;
+        .field label {
+            display: block;
+            color: var(--ams-navy);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
         }
 
-        .actions {
+        .field label .required {
+            color: var(--ams-red);
+        }
+
+        .field label .optional {
+            color: var(--ams-navy);
+            font-weight: 400;
+        }
+
+        .field input[type="text"],
+        .field input[type="email"],
+        .field input[type="tel"] {
+            width: 100%;
+            border: 0;
+            border-bottom: 1px solid #cbd5e1;
+            padding: 0.5rem 0;
+            font-size: 1rem;
+            background: transparent;
+            color: var(--text);
+        }
+
+        .field input:focus {
+            outline: 0;
+            border-bottom-color: var(--ams-navy);
+        }
+
+        .student-block {
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px dashed var(--border);
+        }
+
+        .student-block:last-child {
+            border-bottom: 0;
+            margin-bottom: 0;
+        }
+
+        .billing-note {
+            color: var(--ams-red);
+            font-weight: 600;
+            margin: -1rem 0 1.5rem;
+        }
+
+        /* Totals */
+        .totals-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 1rem 0;
+            border-top: 1px solid var(--border);
+            font-size: 1.05rem;
+            margin: 2rem 0;
+        }
+
+        /* Payment placeholder */
+        .payment-card {
+            text-align: center;
+        }
+
+        .payment-actions {
             display: flex;
             gap: 1rem;
+            justify-content: center;
             flex-wrap: wrap;
+            margin-top: 1rem;
         }
 
         .btn {
-            flex: 1;
-            min-width: 220px;
-            padding: 1rem;
-            border-radius: 6px;
+            padding: 0.85rem 2rem;
+            border: 0;
+            border-radius: 30px;
             font-size: 1rem;
-            font-weight: 700;
+            font-weight: 600;
             cursor: not-allowed;
-            opacity: 0.65;
+            opacity: 0.55;
+            min-width: 200px;
         }
 
         .btn-primary {
-            background: #87c65a;
-            color: #ffffff;
-            border: 1px solid #87c65a;
+            background: var(--ams-green);
+            color: #fff;
         }
 
         .btn-secondary {
-            background: #ffffff;
-            color: #223A74;
-            border: 1px solid #223A74;
+            background: #fff;
+            color: var(--ams-navy);
+            border: 1px solid var(--ams-navy);
         }
 
-        .note {
-            font-size: 0.9rem;
-            color: #666666;
-            margin-top: 0.85rem;
+        .placeholder-note {
+            font-size: 0.85rem;
+            color: var(--muted);
+            margin-top: 1rem;
         }
 
-        .dates {
-            margin: 0;
-            padding-left: 1.2rem;
+        /* Flash messages */
+        .flash {
+            padding: 0.85rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            display: none;
         }
 
-        @media (max-width: 640px) {
-            body {
-                padding: 1rem;
+        .flash.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .flash.visible { display: block; }
+
+        @media (max-width: 720px) {
+            .product-row {
+                grid-template-columns: 1fr 1fr;
             }
-
-            dl {
-                grid-template-columns: 1fr;
-            }
-
-            dt {
-                margin-top: 0.4rem;
+            .product-row .header-row { display: none; }
+            .product-row > div::before {
+                content: attr(data-label);
+                display: block;
+                font-size: 0.8rem;
+                color: var(--muted);
+                margin-bottom: 0.25rem;
             }
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <div class="card">
-        <h1>{{ $session->course_title }}</h1>
+    <h1 class="page-title">Registration Page</h1>
 
-        <p class="course-code">
-            Course code: {{ $session->course_code }}
-        </p>
+    <div class="intro">
+        <p>Please ensure you have checked all entry requirements on the relevant course page prior to completing your registration below.</p>
+        <p>Please complete the registration details below and make your payment.<br>
+        Once payment is confirmed you will receive a receipt of payment and a link to complete your online enrolment.</p>
+        <p>To reduce delays ensure you provide your entry requirements for online courses.<br>
+        For online courses login information is provided once entry requirements have been met.</p>
+    </div>
 
-        <h2>Your enrolment</h2>
+    <hr class="divider">
 
-        <dl>
-            <dt>Payment plan</dt>
-            <dd>{{ $session->plan_title ?? $session->plan_id }}</dd>
+    <p class="company-note">
+        For Companies: If you increase the quantity amount, the system will allow you to add multiple students on one invoice.
+    </p>
 
-            @if ($session->start_date)
-                <dt>Start date</dt>
-                <dd>{{ $session->start_date->format('j M Y') }}</dd>
-            @endif
+    <div id="flash" class="flash error" role="alert"></div>
 
-            @if ($session->end_date)
-                <dt>End date</dt>
-                <dd>{{ $session->end_date->format('j M Y') }}</dd>
-            @endif
+    <!-- Product / quantity row -->
+    <div class="product-row" id="productRow">
+        <div class="header-row">
+            <div class="header">Product</div>
+            <div class="header" style="text-align:center;">Price</div>
+            <div class="header" style="text-align:center;">Quantity</div>
+            <div class="header" style="text-align:right;">Subtotal</div>
+        </div>
 
-            @if (! empty($session->dates) && is_array($session->dates))
-                <dt>Scheduled dates</dt>
-                <dd>
-                    <ul class="dates">
-                        @foreach ($session->dates as $date)
-                            <li>{{ is_array($date) ? ($date['date'] ?? json_encode($date)) : $date }}</li>
-                        @endforeach
-                    </ul>
-                </dd>
-            @endif
+        <div class="product-name" data-label="Product">
+            {{ $session->course_code }} {{ $session->course_title }}
+        </div>
 
-            <dt>Students</dt>
-            <dd>{{ $session->quantity }}</dd>
+        <div style="text-align:center;" data-label="Price">
+            ${{ number_format((float) $session->unit_price, 2) }}
+        </div>
 
-            <dt>Unit price</dt>
-            <dd>${{ number_format((float) $session->unit_price, 2) }}</dd>
-        </dl>
+        <div data-label="Quantity">
+            <div class="quantity-control">
+                <button type="button" id="qtyDec" aria-label="Decrease quantity">−</button>
+                <input
+                    type="number"
+                    id="qtyInput"
+                    value="{{ $session->quantity }}"
+                    min="1"
+                    max="50"
+                    inputmode="numeric"
+                    aria-label="Quantity"
+                >
+                <button type="button" id="qtyInc" aria-label="Increase quantity">+</button>
+            </div>
+        </div>
 
-        <div class="totals">
-            Subtotal: <strong>${{ number_format((float) $session->subtotal, 2) }}</strong>
+        <div style="text-align:right;" data-label="Subtotal" id="rowSubtotal">
+            ${{ number_format((float) $session->subtotal, 2) }}
         </div>
     </div>
 
-    <div class="card">
-        <h2>Choose how to pay</h2>
+    <!-- Form: students + billing -->
+    <form id="checkoutForm" onsubmit="event.preventDefault();">
 
-        <div class="actions">
-            <button type="button" class="btn btn-primary" disabled>Pay by card</button>
-            <button type="button" class="btn btn-secondary" disabled>Pay by purchase order</button>
+        <!-- Student details (dynamic) -->
+        <div class="card" id="studentsCard">
+            <h2>Student details</h2>
+            <div id="studentsContainer">
+                {{-- Rendered by JavaScript on load and on quantity change --}}
+            </div>
         </div>
 
-        <p class="note">
-            Payment options will be enabled in the next release.
-        </p>
-    </div>
+        <!-- Billing details -->
+        <div class="card">
+            <h2>Billing Details</h2>
+            <p class="billing-note">(The following information is required for your Tax invoice)</p>
+
+            <div class="field">
+                <label>First Name <span class="required">(Required *)</span></label>
+                <input type="text" name="billing[first_name]" required>
+            </div>
+
+            <div class="field">
+                <label>Last Name <span class="required">(Required *)</span></label>
+                <input type="text" name="billing[last_name]" required>
+            </div>
+
+            <div class="field">
+                <label>Company/Business Name <span class="optional">(optional)</span></label>
+                <input type="text" name="billing[company]">
+            </div>
+
+            <div class="field">
+                <label>Street Address 1 <span class="optional">(optional)</span></label>
+                <input type="text" name="billing[address_1]">
+            </div>
+
+            <div class="field">
+                <label>Street Address 2 <span class="optional">(optional)</span></label>
+                <input type="text" name="billing[address_2]">
+            </div>
+
+            <div class="field">
+                <label>City <span class="optional">(optional)</span></label>
+                <input type="text" name="billing[city]">
+            </div>
+
+            <div class="field">
+                <label>Postcode <span class="optional">(optional)</span></label>
+                <input type="text" name="billing[postcode]">
+            </div>
+
+            <div class="field">
+                <label>Phone <span class="optional">(optional)</span></label>
+                <input type="tel" name="billing[phone]">
+            </div>
+
+            <div class="field">
+                <label>Email <span class="required">(Required *)</span></label>
+                <input type="email" name="billing[email]" required>
+            </div>
+
+            <div class="field">
+                <label>ABN <span class="optional">(optional)</span></label>
+                <input type="text" name="billing[abn]">
+            </div>
+        </div>
+
+        <!-- Totals -->
+        <div class="totals-row">
+            <span>Subtotal</span>
+            <span id="footerSubtotal">${{ number_format((float) $session->subtotal, 2) }}</span>
+        </div>
+
+        <!-- Payment placeholder -->
+        <div class="card payment-card">
+            <h2>Choose how to pay</h2>
+            <div class="payment-actions">
+                <button type="button" class="btn btn-primary" disabled>Pay by card</button>
+                <button type="button" class="btn btn-secondary" disabled>Pay by purchase order</button>
+            </div>
+            <p class="placeholder-note">Payment options will be enabled in the next release.</p>
+        </div>
+    </form>
 </div>
+
+<script>
+(function () {
+    const csrfToken    = document.querySelector('meta[name="csrf-token"]').content;
+    const updateUrl    = @json(route('checkout.quantity.update', $session));
+    const minQty       = 1;
+    const maxQty       = 50;
+
+    const qtyInput     = document.getElementById('qtyInput');
+    const qtyInc       = document.getElementById('qtyInc');
+    const qtyDec       = document.getElementById('qtyDec');
+    const rowSubtotal  = document.getElementById('rowSubtotal');
+    const footerSub    = document.getElementById('footerSubtotal');
+    const container    = document.getElementById('studentsContainer');
+    const flash        = document.getElementById('flash');
+
+    let currentQty     = parseInt(qtyInput.value, 10) || 1;
+    let inFlight       = false;
+
+    function clampQty(value) {
+        const n = parseInt(value, 10);
+        if (isNaN(n)) return minQty;
+        if (n < minQty) return minQty;
+        if (n > maxQty) return maxQty;
+        return n;
+    }
+
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function studentBlockHtml(index) {
+        const i = index;
+        const num = i + 1;
+        return `
+        <div class="student-block" data-student-index="${i}">
+            <h3>Student Number : ${num}</h3>
+
+            <div class="field">
+                <label>Student First Name <span class="required">(Required *)</span></label>
+                <input type="text" name="students[${i}][first_name]" required>
+            </div>
+
+            <div class="field">
+                <label>Student Last Name <span class="required">(Required *)</span></label>
+                <input type="text" name="students[${i}][last_name]" required>
+            </div>
+
+            <div class="field">
+                <label>Student Email <span class="required">(Required *)</span></label>
+                <input type="email" name="students[${i}][email]" required>
+            </div>
+
+            <div class="field">
+                <label>Student Phone Number <span class="required">(Required *)</span></label>
+                <input type="tel" name="students[${i}][phone]" placeholder="04XXXXXXXX" required>
+            </div>
+        </div>`;
+    }
+
+    function renderStudentBlocks(qty) {
+        // Preserve existing input values so user-entered data isn't lost on +/-
+        const existing = {};
+        container.querySelectorAll('.student-block').forEach(block => {
+            const idx = block.dataset.studentIndex;
+            existing[idx] = {};
+            block.querySelectorAll('input').forEach(input => {
+                existing[idx][input.name] = input.value;
+            });
+        });
+
+        let html = '';
+        for (let i = 0; i < qty; i++) {
+            html += studentBlockHtml(i);
+        }
+        container.innerHTML = html;
+
+        // Restore values where the index still exists
+        Object.keys(existing).forEach(idx => {
+            if (parseInt(idx, 10) < qty) {
+                Object.keys(existing[idx]).forEach(name => {
+                    const input = container.querySelector(`[name="${CSS.escape(name)}"]`);
+                    if (input) input.value = existing[idx][name];
+                });
+            }
+        });
+    }
+
+    function updateButtonStates(qty) {
+        qtyDec.disabled = qty <= minQty;
+        qtyInc.disabled = qty >= maxQty;
+    }
+
+    function showError(message) {
+        flash.textContent = message;
+        flash.classList.add('visible');
+    }
+
+    function clearError() {
+        flash.textContent = '';
+        flash.classList.remove('visible');
+    }
+
+    async function pushQuantity(newQty) {
+        if (inFlight) return;
+        if (newQty === currentQty) return;
+
+        inFlight = true;
+        clearError();
+
+        try {
+            const response = await fetch(updateUrl, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({ quantity: newQty }),
+            });
+
+            if (!response.ok) {
+                let message = 'Could not update quantity. Please try again.';
+                try {
+                    const data = await response.json();
+                    if (data && data.message) message = data.message;
+                    if (data && data.errors && data.errors.quantity) {
+                        message = data.errors.quantity[0];
+                    }
+                } catch (_) {}
+                // Revert input to last known good quantity
+                qtyInput.value = currentQty;
+                updateButtonStates(currentQty);
+                showError(message);
+                return;
+            }
+
+            const data = await response.json();
+            currentQty = data.quantity;
+            qtyInput.value = currentQty;
+            rowSubtotal.textContent = data.formatted_subtotal;
+            footerSub.textContent  = data.formatted_subtotal;
+            renderStudentBlocks(currentQty);
+            updateButtonStates(currentQty);
+        } catch (err) {
+            qtyInput.value = currentQty;
+            updateButtonStates(currentQty);
+            showError('Network error. Please check your connection and try again.');
+        } finally {
+            inFlight = false;
+        }
+    }
+
+    // Wire up controls
+    qtyInc.addEventListener('click', () => {
+        const next = clampQty(currentQty + 1);
+        pushQuantity(next);
+    });
+
+    qtyDec.addEventListener('click', () => {
+        const next = clampQty(currentQty - 1);
+        pushQuantity(next);
+    });
+
+    let typingTimer;
+    qtyInput.addEventListener('input', () => {
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => {
+            const next = clampQty(qtyInput.value);
+            qtyInput.value = next;
+            pushQuantity(next);
+        }, 400);
+    });
+
+    qtyInput.addEventListener('blur', () => {
+        const next = clampQty(qtyInput.value);
+        if (next !== parseInt(qtyInput.value, 10)) {
+            qtyInput.value = next;
+        }
+        pushQuantity(next);
+    });
+
+    // Initial render
+    renderStudentBlocks(currentQty);
+    updateButtonStates(currentQty);
+})();
+</script>
 </body>
 </html>
