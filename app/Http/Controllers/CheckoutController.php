@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\SaveCheckoutDetailsRequest;
 use App\Http\Requests\UpdateCheckoutQuantityRequest;
 use App\Models\CheckoutSession;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 
 class CheckoutController extends Controller
@@ -47,16 +49,6 @@ class CheckoutController extends Controller
 
         $quantity = (int) $request->integer('quantity');
 
-        /*
-        |--------------------------------------------------------------------------
-        | Capacity check using stored RTO snapshot
-        |--------------------------------------------------------------------------
-        |
-        | We do not re-call RTO Data in this phase. We use the stock/enrolment
-        | snapshot that was saved when the checkout session was created.
-        |
-        */
-
         if ($this->requiresCapacityCheck($checkoutSession)) {
             $remaining = (int) $checkoutSession->stock_quantity
                 - (int) ($checkoutSession->enrolments ?? 0);
@@ -84,6 +76,53 @@ class CheckoutController extends Controller
             'subtotal' => number_format($subtotal, 2, '.', ''),
             'formatted_subtotal' => '$' . number_format($subtotal, 2),
         ]);
+    }
+
+    public function saveDetails(
+        SaveCheckoutDetailsRequest $request,
+        CheckoutSession $checkoutSession
+    ): RedirectResponse {
+        if ($checkoutSession->isCompleted()) {
+            return redirect()
+                ->route('checkout.show', $checkoutSession)
+                ->withErrors([
+                    'checkout' => 'This checkout has already been completed.',
+                ]);
+        }
+
+        if ($checkoutSession->isExpired()) {
+            return redirect()
+                ->route('checkout.show', $checkoutSession)
+                ->withErrors([
+                    'checkout' => 'This checkout link has expired. Please start your enrolment again.',
+                ]);
+        }
+
+        $validated = $request->validated();
+
+        $students = $validated['students'] ?? [];
+        $billing = $validated['billing'] ?? [];
+
+        if (count($students) !== (int) $checkoutSession->quantity) {
+            return redirect()
+                ->route('checkout.show', $checkoutSession)
+                ->withInput()
+                ->withErrors([
+                    'students' => 'Please provide details for exactly '
+                        . $checkoutSession->quantity
+                        . ' student(s).',
+                ]);
+        }
+
+        $checkoutSession->update([
+            'student_details' => $students,
+            'billing_details' => $billing,
+            'details_completed_at' => now(),
+        ]);
+
+        return redirect()
+            ->route('checkout.show', $checkoutSession)
+            ->with('success', 'Details saved successfully. Payment options will be enabled next.');
     }
 
     private function requiresCapacityCheck(CheckoutSession $session): bool

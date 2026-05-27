@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CheckoutLoadController;
 
-
+Route::post('/checkout/{checkoutSession:uuid}/details', [CheckoutController::class, 'saveDetails'])
+    ->name('checkout.details.save');
 Route::get('/checkout/load', CheckoutLoadController::class)
     ->middleware('throttle:30,1')
     ->name('checkout.load');
