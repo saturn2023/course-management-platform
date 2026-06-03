@@ -307,3 +307,7 @@ Route::get('/enrolment-completed', function () {
 Route::get('/enrolment-not-successful', function () {
     return response()->view('enrolments.failed', [], 404);
 })->name('enrolment.failed');
+
+Route::get('/mockups/online-refresher-courses', function () {
+    return view('mockups.online-refresher-courses');
+})->name('mockups.online-refresher-courses');
