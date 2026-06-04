@@ -206,15 +206,18 @@
             flex-wrap: wrap;
             margin-top: 1rem;
         }
-
-        .btn {
-            padding: 0.85rem 2rem;
-            border: 0;
-            border-radius: 30px;
-            font-size: 1rem;
-            font-weight: 600;
-            min-width: 200px;
-        }
+.btn {
+    padding: 0.85rem 2rem;
+    border: 0;
+    border-radius: 30px;
+    font-size: 1rem;
+    font-weight: 600;
+    min-width: 200px;
+    text-decoration: none;
+    text-align: center;
+    display: inline-block;
+}
+       
 
         .btn-continue {
             background: var(--ams-green);
@@ -474,15 +477,39 @@
             @endif
         </div>
 
-        <!-- Payment placeholder -->
-        <div class="card payment-card">
-            <h2>Choose how to pay</h2>
-            <div class="actions-row">
-                <button type="button" class="btn btn-primary btn-disabled" disabled>Pay by card</button>
-                <button type="button" class="btn btn-secondary btn-disabled" disabled>Pay by purchase order</button>
-            </div>
-            <p class="placeholder-note">Payment options will be enabled in the next release.</p>
-        </div>
+<!-- Payment options -->
+<div class="card payment-card">
+    <h2>Choose how to pay</h2>
+
+    <div class="actions-row">
+        <button type="button" class="btn btn-primary btn-disabled" disabled>
+            Pay by card
+        </button>
+
+        @if ($session->hasSavedDetails())
+            <a
+                href="{{ route('checkout.purchase-order.show', $session) }}"
+                class="btn btn-secondary"
+            >
+                Pay by purchase order
+            </a>
+        @else
+            <button type="button" class="btn btn-secondary btn-disabled" disabled>
+                Pay by purchase order
+            </button>
+        @endif
+    </div>
+
+    @if ($session->hasSavedDetails())
+        <p class="placeholder-note">
+            Card payment will be enabled later. Purchase Order payment is available now.
+        </p>
+    @else
+        <p class="placeholder-note">
+            Save student and billing details before choosing a payment option.
+        </p>
+    @endif
+</div>
     </form>
 </div>
 

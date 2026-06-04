@@ -10,29 +10,37 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Order extends Model
 {
     protected $fillable = [
-        'student_id',
+    'student_id',
 
-        'billing_first_name',
-        'billing_last_name',
-        'billing_company',
-        'billing_email',
-        'billing_phone',
-        'billing_address_1',
-        'billing_address_2',
-        'billing_city',
-        'billing_postcode',
-        'billing_abn',
-        'purchaser_confirmation_sent_at',
-        'subtotal',
-        'total',
-        'status',
-        'xero_status',
-        'enrolment_status',
-        'xero_invoice_id',
-        'xero_invoice_number',
-        'xero_sent_at',
-        'xero_error_message',
-    ];
+    'billing_first_name',
+    'billing_last_name',
+    'billing_company',
+    'billing_email',
+    'billing_phone',
+    'billing_address_1',
+    'billing_address_2',
+    'billing_city',
+    'billing_postcode',
+    'billing_abn',
+
+    'purchase_order_number',
+    'purchase_order_document_path',
+    'payment_method',
+    'payment_status',
+
+    'subtotal',
+    'total',
+    'status',
+    'xero_status',
+    'enrolment_status',
+
+    'xero_invoice_id',
+    'xero_invoice_number',
+    'xero_sent_at',
+    'xero_error_message',
+
+    'purchaser_confirmation_sent_at',
+];
 
 protected $casts = [
     'subtotal' => 'decimal:2',

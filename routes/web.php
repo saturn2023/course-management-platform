@@ -1,15 +1,31 @@
 <?php
 
+use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\CheckoutLoadController;
+use App\Http\Controllers\PurchaseOrderCheckoutController;
 use App\Jobs\SubmitEnrolmentToApiJob;
+use App\Models\CheckoutSession;
 use App\Models\Enrolment;
 use App\Models\EnrolmentSubmission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\CheckoutController;
-use App\Http\Controllers\CheckoutLoadController;
 
-Route::post('/checkout/{checkoutSession:uuid}/details', [CheckoutController::class, 'saveDetails'])
-    ->name('checkout.details.save');
+/*
+|--------------------------------------------------------------------------
+| Home
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/', function () {
+    return view('welcome');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Checkout routes
+|--------------------------------------------------------------------------
+*/
+
 Route::get('/checkout/load', CheckoutLoadController::class)
     ->middleware('throttle:30,1')
     ->name('checkout.load');
@@ -19,15 +35,22 @@ Route::get('/checkout/{checkoutSession:uuid}', [CheckoutController::class, 'show
 
 Route::patch('/checkout/{checkoutSession:uuid}/quantity', [CheckoutController::class, 'updateQuantity'])
     ->name('checkout.quantity.update');
-Route::get('/checkout/load', CheckoutLoadController::class)
-    ->middleware('throttle:30,1')
-    ->name('checkout.load');
 
-Route::get('/checkout/{checkoutSession:uuid}', [CheckoutController::class, 'show'])
-    ->name('checkout.show');
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::post('/checkout/{checkoutSession:uuid}/details', [CheckoutController::class, 'saveDetails'])
+    ->name('checkout.details.save');
+
+Route::get('/checkout/{checkoutSession:uuid}/purchase-order', [PurchaseOrderCheckoutController::class, 'show'])
+    ->name('checkout.purchase-order.show');
+
+Route::post('/checkout/{checkoutSession:uuid}/purchase-order', [PurchaseOrderCheckoutController::class, 'store'])
+    ->name('checkout.purchase-order.store');
+
+Route::get('/checkout/{checkoutSession:uuid}/thank-you', function (CheckoutSession $checkoutSession) {
+    return view('checkout.thank-you', [
+        'session' => $checkoutSession,
+        'order' => $checkoutSession->order,
+    ]);
+})->name('checkout.thank-you');
 
 /*
 |--------------------------------------------------------------------------
@@ -216,15 +239,6 @@ Route::post('/enrol/{token}', function (Request $request, string $token) {
     |--------------------------------------------------------------------------
     | File uploads
     |--------------------------------------------------------------------------
-    |
-    | The form may use either named upload fields:
-    | id_document / vet_transcript
-    |
-    | Or old WordPress style:
-    | documents[]
-    |
-    | This handles both safely for now.
-    |
     */
 
     $idDocumentPath = null;
@@ -307,6 +321,12 @@ Route::get('/enrolment-completed', function () {
 Route::get('/enrolment-not-successful', function () {
     return response()->view('enrolments.failed', [], 404);
 })->name('enrolment.failed');
+
+/*
+|--------------------------------------------------------------------------
+| Mockup routes
+|--------------------------------------------------------------------------
+*/
 
 Route::get('/mockups/online-refresher-courses', function () {
     return view('mockups.online-refresher-courses');
