@@ -331,3 +331,14 @@ Route::get('/enrolment-not-successful', function () {
 Route::get('/mockups/online-refresher-courses', function () {
     return view('mockups.online-refresher-courses');
 })->name('mockups.online-refresher-courses');
+Route::get('/checkout/{checkoutSession:uuid}/card-payment', function (
+    CheckoutSession $checkoutSession
+) {
+    abort_if($checkoutSession->isExpired(), 410);
+    abort_if($checkoutSession->isCompleted(), 409);
+    abort_unless($checkoutSession->hasSavedDetails(), 422);
+
+    return view('checkout.card-payment-coming-soon', [
+        'session' => $checkoutSession,
+    ]);
+})->name('checkout.card-payment.show');

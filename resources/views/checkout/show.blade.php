@@ -467,9 +467,9 @@
 
         <!-- Continue button -->
         <div class="card continue-card">
-            <button type="submit" class="btn btn-continue">
-                {{ $session->hasSavedDetails() ? 'Update Details' : 'Save Details & Continue' }}
-            </button>
+           <button type="submit" class="btn btn-continue">
+    Continue to Checkout
+</button>
             @if ($session->hasSavedDetails())
                 <p class="placeholder-note">
                     Details saved {{ $session->details_completed_at->diffForHumans() }}.
@@ -478,38 +478,7 @@
         </div>
 
 <!-- Payment options -->
-<div class="card payment-card">
-    <h2>Choose how to pay</h2>
 
-    <div class="actions-row">
-        <button type="button" class="btn btn-primary btn-disabled" disabled>
-            Pay by card
-        </button>
-
-        @if ($session->hasSavedDetails())
-            <a
-                href="{{ route('checkout.purchase-order.show', $session) }}"
-                class="btn btn-secondary"
-            >
-                Pay by purchase order
-            </a>
-        @else
-            <button type="button" class="btn btn-secondary btn-disabled" disabled>
-                Pay by purchase order
-            </button>
-        @endif
-    </div>
-
-    @if ($session->hasSavedDetails())
-        <p class="placeholder-note">
-            Card payment will be enabled later. Purchase Order payment is available now.
-        </p>
-    @else
-        <p class="placeholder-note">
-            Save student and billing details before choosing a payment option.
-        </p>
-    @endif
-</div>
     </form>
 </div>
 

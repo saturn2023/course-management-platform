@@ -78,52 +78,47 @@ class CheckoutController extends Controller
         ]);
     }
 
-    public function saveDetails(
-        SaveCheckoutDetailsRequest $request,
-        CheckoutSession $checkoutSession
-    ): RedirectResponse {
-        if ($checkoutSession->isCompleted()) {
-            return redirect()
-                ->route('checkout.show', $checkoutSession)
-                ->withErrors([
-                    'checkout' => 'This checkout has already been completed.',
-                ]);
-        }
-
-        if ($checkoutSession->isExpired()) {
-            return redirect()
-                ->route('checkout.show', $checkoutSession)
-                ->withErrors([
-                    'checkout' => 'This checkout link has expired. Please start your enrolment again.',
-                ]);
-        }
-
-        $validated = $request->validated();
-
-        $students = $validated['students'] ?? [];
-        $billing = $validated['billing'] ?? [];
-
-        if (count($students) !== (int) $checkoutSession->quantity) {
-            return redirect()
-                ->route('checkout.show', $checkoutSession)
-                ->withInput()
-                ->withErrors([
-                    'students' => 'Please provide details for exactly '
-                        . $checkoutSession->quantity
-                        . ' student(s).',
-                ]);
-        }
-
-        $checkoutSession->update([
-            'student_details' => $students,
-            'billing_details' => $billing,
-            'details_completed_at' => now(),
-        ]);
-
+public function saveDetails(
+    SaveCheckoutDetailsRequest $request,
+    CheckoutSession $checkoutSession
+): RedirectResponse {
+    if ($checkoutSession->isCompleted()) {
         return redirect()
             ->route('checkout.show', $checkoutSession)
-            ->with('success', 'Details saved successfully. Payment options will be enabled next.');
+            ->withErrors([
+                'checkout' => 'This checkout has already been completed.',
+            ]);
     }
+
+    if ($checkoutSession->isExpired()) {
+        return redirect()
+            ->route('checkout.show', $checkoutSession)
+            ->withErrors([
+                'checkout' => 'This checkout link has expired. Please start your enrolment again.',
+            ]);
+    }
+
+    $validated = $request->validated();
+
+    $students = $validated['students'];
+    $billing = $validated['billing'];
+
+    $checkoutSession->update([
+        'student_details' => $students,
+        'billing_details' => $billing,
+        'details_completed_at' => now(),
+    ]);
+
+    $user = auth()->user();
+
+    if ($user && $user->canPayByPurchaseOrder()) {
+        return redirect()
+            ->route('checkout.purchase-order.show', $checkoutSession);
+    }
+
+    return redirect()
+        ->route('checkout.card-payment.show', $checkoutSession);
+}
 
     private function requiresCapacityCheck(CheckoutSession $session): bool
     {
