@@ -13,7 +13,8 @@ use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-
+use Filament\Tables\Filters\SelectFilter;
+use Illuminate\Support\Facades\Storage;
 class OrdersTable
 {
     public static function configure(Table $table): Table
@@ -35,7 +36,45 @@ class OrdersTable
                     ->searchable()
                     ->copyable()
                     ->placeholder('-'),
+              TextColumn::make('purchase_order_number')
+    ->label('PO number')
+    ->searchable()
+    ->copyable()
+    ->placeholder('-')
+    ->toggleable(isToggledHiddenByDefault: true),
 
+TextColumn::make('payment_method')
+    ->label('Payment method')
+    ->badge()
+    ->formatStateUsing(fn (?string $state): string => match ($state) {
+        'purchase_order' => 'Purchase Order',
+        'card' => 'Card',
+        default => $state
+            ? ucwords(str_replace('_', ' ', $state))
+            : '-',
+    })
+    ->color(fn (?string $state): string => match ($state) {
+        'purchase_order' => 'warning',
+        'card' => 'success',
+        default => 'gray',
+    })
+    ->placeholder('-'),
+
+TextColumn::make('payment_status')
+    ->label('Payment status')
+    ->badge()
+    ->formatStateUsing(fn (?string $state): string => $state
+        ? ucwords(str_replace('_', ' ', $state))
+        : '-'
+    )
+    ->color(fn (?string $state): string => match ($state) {
+        'paid' => 'success',
+        'pending' => 'warning',
+        'failed' => 'danger',
+        'refunded' => 'gray',
+        default => 'gray',
+    })
+    ->placeholder('-'),
                 TextColumn::make('students_count')
                     ->label('Students')
                     ->counts('students')
@@ -51,16 +90,23 @@ class OrdersTable
                     ->money('AUD')
                     ->sortable(),
 
-                TextColumn::make('status')
-                    ->label('Order status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'paid' => 'success',
-                        'pending' => 'gray',
-                        'cancelled' => 'danger',
-                        default => 'gray',
-                    })
-                    ->searchable(),
+               TextColumn::make('status')
+    ->label('Order status')
+    ->badge()
+    ->color(fn (string $state): string => match ($state) {
+        'paid' => 'success',
+          'processing' => 'info',
+        'po_pending' => 'warning',
+        'pending' => 'gray',
+        'cancelled' => 'danger',
+        'failed' => 'danger',
+        default => 'gray',
+    })
+    ->formatStateUsing(fn (string $state): string => match ($state) {
+        'po_pending' => 'PO Pending',
+        default => ucwords(str_replace('_', ' ', $state)),
+    })
+    ->searchable(),
 
                 TextColumn::make('xero_status')
                     ->label('Xero')
@@ -138,24 +184,66 @@ class OrdersTable
             ])
             ->defaultSort('id', 'desc')
             ->filters([
-                //
-            ])
-            ->recordActions([
-                Action::make('process_order')
-                    ->label('Process Order')
-                    ->icon('heroicon-o-play')
-                    ->color('success')
-                    ->visible(fn ($record) => $record->status === 'paid' && blank($record->xero_invoice_id))
-                    ->requiresConfirmation()
-                    ->action(function ($record) {
-                        ProcessOrderJob::dispatch($record->id);
+   SelectFilter::make('status')
+    ->label('Order status')
+    ->options([
+        'paid' => 'Paid',
+        'processing' => 'Processing',
+        'po_pending' => 'PO Pending',
+        'pending' => 'Pending',
+        'cancelled' => 'Cancelled',
+    ]),
 
-                        Notification::make()
-                            ->title('Order processing started')
-                            ->body('Xero, enrolment, email, and SMS jobs have been queued where applicable.')
-                            ->success()
-                            ->send();
-                    }),
+    SelectFilter::make('payment_method')
+        ->label('Payment method')
+        ->options([
+            'purchase_order' => 'Purchase Order',
+            'card' => 'Card',
+        ]),
+
+    SelectFilter::make('payment_status')
+        ->label('Payment status')
+        ->options([
+            'pending' => 'Pending',
+            'paid' => 'Paid',
+            'failed' => 'Failed',
+        ]),
+])
+            ->recordActions([
+Action::make('process_order')
+    ->label('Process Order')
+    ->icon('heroicon-o-play')
+    ->color('success')
+    ->visible(fn ($record): bool =>
+        in_array($record->status, ['paid', 'po_pending'], true)
+        && blank($record->xero_invoice_id)
+    )
+    ->requiresConfirmation()
+    ->modalHeading(fn ($record): string =>
+        $record->status === 'po_pending'
+            ? 'Approve and process purchase order'
+            : 'Process order'
+    )
+    ->modalDescription(fn ($record): string =>
+        $record->status === 'po_pending'
+            ? 'This will approve the purchase order, create a draft unpaid Xero invoice, and create enrolment links for the students.'
+            : 'This will create the Xero invoice and enrolment links for the order.'
+    )
+    ->action(function ($record) {
+        if ($record->status === 'po_pending') {
+            $record->update([
+                'status' => 'processing',
+            ]);
+        }
+
+        ProcessOrderJob::dispatch($record->id);
+
+        Notification::make()
+            ->title('Order processing started')
+            ->body('Xero, enrolment, email, and SMS jobs have been queued where applicable.')
+            ->success()
+            ->send();
+    }),
 
                 Action::make('retry_order')
                     ->label('Retry Order')
@@ -293,7 +381,20 @@ class OrdersTable
                             ->success()
                             ->send();
                     }),
-
+                Action::make('download_purchase_order')
+    ->label('Download PO document')
+    ->icon('heroicon-o-arrow-down-tray')
+    ->color('warning')
+    ->visible(fn ($record): bool =>
+        filled($record->purchase_order_document_path)
+        && Storage::disk('local')->exists($record->purchase_order_document_path)
+    )
+    ->action(function ($record) {
+        return Storage::disk('local')->download(
+            $record->purchase_order_document_path,
+            basename($record->purchase_order_document_path)
+        );
+    }),
                 Action::make('view_xero_invoice')
                     ->label('View in Xero')
                     ->icon('heroicon-o-arrow-top-right-on-square')

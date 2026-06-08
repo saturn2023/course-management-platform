@@ -9,7 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Str;
 use Throwable;
-
+use App\Support\OrderCompletion;
 class CreateEnrolmentJob implements ShouldQueue
 {
     use Queueable;

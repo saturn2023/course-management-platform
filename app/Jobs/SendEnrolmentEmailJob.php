@@ -5,6 +5,8 @@ namespace App\Jobs;
 use App\Mail\EnrolmentLinkMail;
 use App\Models\Enrolment;
 use App\Models\IntegrationLog;
+use App\Models\Order;
+use App\Support\OrderCompletion;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Mail;
@@ -19,11 +21,22 @@ class SendEnrolmentEmailJob implements ShouldQueue
     public function __construct(
         public int $enrolmentId,
         public bool $forceResend = false
-    ) {}
+    ) {
+    }
 
     public function handle(): void
     {
-        $enrolment = Enrolment::with(['order', 'student', 'course'])->findOrFail($this->enrolmentId);
+        $enrolment = Enrolment::with([
+            'order',
+            'student',
+            'course',
+        ])->findOrFail($this->enrolmentId);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Duplicate protection
+        |--------------------------------------------------------------------------
+        */
 
         if ($enrolment->email_sent_at && ! $this->forceResend) {
             IntegrationLog::create([
@@ -40,6 +53,12 @@ class SendEnrolmentEmailJob implements ShouldQueue
                     'message' => 'Skipped email because the enrolment link email was already sent.',
                 ]),
             ]);
+
+            /*
+             * This email already exists, so check whether all emails for the
+             * order have now been sent.
+             */
+            $this->updateOrderEnrolmentStatus($enrolment->order_id);
 
             return;
         }
@@ -82,10 +101,6 @@ class SendEnrolmentEmailJob implements ShouldQueue
                 'link_sent_at' => now(),
             ]);
 
-            $enrolment->order?->update([
-                'enrolment_status' => 'link_sent',
-            ]);
-
             IntegrationLog::create([
                 'order_id' => $enrolment->order_id,
                 'service' => 'email',
@@ -100,6 +115,12 @@ class SendEnrolmentEmailJob implements ShouldQueue
                     'force_resend' => $this->forceResend,
                 ]),
             ]);
+
+            /*
+             * Only mark the order link_sent after all of its enrolment
+             * emails have been successfully sent.
+             */
+            $this->updateOrderEnrolmentStatus($enrolment->order_id);
         } catch (Throwable $exception) {
             IntegrationLog::create([
                 'order_id' => $enrolment->order_id,
@@ -116,5 +137,46 @@ class SendEnrolmentEmailJob implements ShouldQueue
 
             throw $exception;
         }
+    }
+
+    /**
+     * Mark the order's enrolment flow as complete only when every enrolment
+     * belonging to the order has had its email sent.
+     */
+    private function updateOrderEnrolmentStatus(?int $orderId): void
+    {
+        if (! $orderId) {
+            return;
+        }
+
+        $order = Order::find($orderId);
+
+        if (! $order) {
+            return;
+        }
+
+        $hasEnrolments = $order->enrolments()->exists();
+
+        if (! $hasEnrolments) {
+            return;
+        }
+
+        $hasUnsentEmails = $order->enrolments()
+            ->whereNull('email_sent_at')
+            ->exists();
+
+        if ($hasUnsentEmails) {
+            return;
+        }
+
+        $order->update([
+            'enrolment_status' => 'link_sent',
+        ]);
+
+        /*
+         * If Xero has also succeeded, this changes the overall order status
+         * from processing to processed.
+         */
+        OrderCompletion::attemptMarkProcessed($order->id);
     }
 }

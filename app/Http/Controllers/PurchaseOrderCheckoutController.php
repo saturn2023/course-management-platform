@@ -2,17 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessOrderJob;
 use App\Models\CheckoutSession;
 use App\Models\Course;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Student;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class PurchaseOrderCheckoutController extends Controller
 {
@@ -30,116 +31,248 @@ class PurchaseOrderCheckoutController extends Controller
     }
 
     /**
-     * Create the Purchase Order order from the checkout session.
+     * Create and automatically process a Purchase Order checkout.
      *
-     * This intentionally does NOT dispatch ProcessOrderJob. The order is created
-     * in a po_pending state and waits for an admin to review and process it.
+     * The order is created as processing, then ProcessOrderJob is dispatched.
+     * That existing job creates:
+     * - the unpaid/draft Xero invoice
+     * - enrolment records and secure enrolment links
+     * - student emails
+     * - purchaser confirmation email
      */
-    public function store(Request $request, CheckoutSession $checkoutSession): RedirectResponse
-    {
+    public function store(
+        Request $request,
+        CheckoutSession $checkoutSession
+    ): RedirectResponse {
         $this->guardSession($checkoutSession);
 
         $validated = $request->validate([
-            'purchase_order_number' => ['required', 'string', 'max:100'],
-            'purchase_order_document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:25600'], // 25 MB
+            'purchase_order_number' => [
+                'required',
+                'string',
+                'max:100',
+            ],
+            'purchase_order_document' => [
+                'required',
+                'file',
+                'mimes:pdf,jpg,jpeg,png',
+                'max:25600',
+            ],
         ]);
 
         $billing = $checkoutSession->billing_details ?? [];
-        $students = $this->normaliseStudents($checkoutSession->student_details ?? []);
+        $students = $this->normaliseStudents(
+            $checkoutSession->student_details ?? []
+        );
 
-        $order = DB::transaction(function () use ($checkoutSession, $validated, $request, $billing, $students) {
-            // Store the PO document on the default (local/private) disk.
-            $documentPath = $request->file('purchase_order_document')->store(
-                "purchase-orders/{$checkoutSession->uuid}"
+        abort_if(
+            $students === [],
+            422,
+            'Student details are required before submitting a purchase order.'
+        );
+
+        abort_if(
+            count($students) !== (int) $checkoutSession->quantity,
+            422,
+            'The number of saved students does not match the checkout quantity.'
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | Store the Purchase Order document
+        |--------------------------------------------------------------------------
+        |
+        | The local disk is private by default, so the uploaded document is not
+        | publicly accessible through a direct URL.
+        |
+        */
+
+        $documentPath = $request
+            ->file('purchase_order_document')
+            ->store(
+                "purchase-orders/{$checkoutSession->uuid}",
+                'local'
             );
 
-            $order = Order::create([
-                'billing_first_name' => $billing['first_name'] ?? null,
-                'billing_last_name' => $billing['last_name'] ?? null,
-                'billing_company' => $billing['company'] ?? null,
-                'billing_email' => $billing['email'] ?? null,
-                'billing_phone' => $billing['phone'] ?? null,
-                'billing_address_1' => $billing['address_1'] ?? null,
-                'billing_address_2' => $billing['address_2'] ?? null,
-                'billing_city' => $billing['city'] ?? null,
-                'billing_postcode' => $billing['postcode'] ?? null,
-                'billing_abn' => $billing['abn'] ?? null,
+        try {
+            $order = DB::transaction(function () use (
+                $checkoutSession,
+                $validated,
+                $billing,
+                $students,
+                $documentPath
+            ) {
+                /*
+                |--------------------------------------------------------------------------
+                | Create the Order
+                |--------------------------------------------------------------------------
+                */
 
-                'purchase_order_number' => $validated['purchase_order_number'],
-                'purchase_order_document_path' => $documentPath,
-                'payment_method' => 'purchase_order',
-                'payment_status' => 'pending',
+                $order = Order::create([
+                    'billing_first_name' => $billing['first_name'] ?? null,
+                    'billing_last_name' => $billing['last_name'] ?? null,
+                    'billing_company' => $billing['company'] ?? null,
+                    'billing_email' => $billing['email'] ?? null,
+                    'billing_phone' => $billing['phone'] ?? null,
+                    'billing_address_1' => $billing['address_1'] ?? null,
+                    'billing_address_2' => $billing['address_2'] ?? null,
+                    'billing_city' => $billing['city'] ?? null,
+                    'billing_postcode' => $billing['postcode'] ?? null,
+                    'billing_abn' => $billing['abn'] ?? null,
 
-                'subtotal' => $checkoutSession->subtotal,
-                'total' => $checkoutSession->subtotal,
+                    'purchase_order_number' =>
+                        $validated['purchase_order_number'],
 
-                'status' => 'po_pending',
-                'xero_status' => 'pending',
-                'enrolment_status' => 'pending',
-            ]);
+                    'purchase_order_document_path' => $documentPath,
 
-            // Create Student records from the saved details and attach via the pivot.
-            $firstStudentId = null;
+                    'payment_method' => 'purchase_order',
+                    'payment_status' => 'pending',
 
-            foreach ($students as $studentData) {
-                $student = Student::create([
-                    'first_name' => $studentData['first_name'] ?? null,
-                    'last_name' => $studentData['last_name'] ?? null,
-                    'email' => $studentData['email'] ?? null,
-                    'phone' => $studentData['phone'] ?? null,
-                    'date_of_birth' => $studentData['date_of_birth'] ?? null,
+                    'subtotal' => $checkoutSession->subtotal,
+                    'total' => $checkoutSession->subtotal,
+
+                    /*
+                     * Processing begins automatically after checkout.
+                     */
+                    'status' => 'processing',
+
+                    /*
+                     * The Xero invoice will be created as DRAFT/unpaid.
+                     */
+                    'xero_status' => 'pending',
+
+                    /*
+                     * Enrolment links have not been created yet.
+                     */
+                    'enrolment_status' => 'pending',
                 ]);
 
-                $order->students()->attach($student->id);
+                /*
+                |--------------------------------------------------------------------------
+                | Create and attach Students
+                |--------------------------------------------------------------------------
+                */
 
-                $firstStudentId ??= $student->id;
-            }
+                $firstStudentId = null;
 
-            // Backward-compatible primary student.
-            if ($firstStudentId !== null) {
-                $order->update(['student_id' => $firstStudentId]);
-            }
+                foreach ($students as $studentData) {
+                    $student = Student::create([
+                        'first_name' => $studentData['first_name'] ?? null,
+                        'last_name' => $studentData['last_name'] ?? null,
+                        'email' => $studentData['email'] ?? null,
+                        'phone' => $studentData['phone'] ?? null,
+                        'date_of_birth' =>
+                            $studentData['date_of_birth'] ?? null,
+                    ]);
 
-            // Single order item representing the course/plan.
-            OrderItem::create([
-                'order_id' => $order->id,
-                'course_id' => $this->resolveCourseId($checkoutSession->course_code),
-                'name' => $this->buildItemName($checkoutSession),
-                'quantity' => $checkoutSession->quantity,
-                'unit_price' => $checkoutSession->unit_price,
-                'total' => $checkoutSession->subtotal,
-            ]);
+                    $order->students()->attach($student->id);
 
-            // Link the session to the order and mark it completed.
-            $checkoutSession->update([
-                'order_id' => $order->id,
-                'completed_at' => now(),
-            ]);
+                    $firstStudentId ??= $student->id;
+                }
 
-            return $order;
-        });
+                /*
+                 * Keep student_id populated for older code that still expects
+                 * one primary student on the order.
+                 */
+                if ($firstStudentId !== null) {
+                    $order->update([
+                        'student_id' => $firstStudentId,
+                    ]);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Create the Order Item
+                |--------------------------------------------------------------------------
+                */
+
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'course_id' => $this->resolveCourseId($checkoutSession),
+                    'name' => $this->buildItemName($checkoutSession),
+                    'quantity' => $checkoutSession->quantity,
+                    'unit_price' => $checkoutSession->unit_price,
+                    'total' => $checkoutSession->subtotal,
+                ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | Complete the Checkout Session
+                |--------------------------------------------------------------------------
+                */
+
+                $checkoutSession->update([
+                    'order_id' => $order->id,
+                    'completed_at' => now(),
+                ]);
+
+                return $order;
+            });
+        } catch (Throwable $exception) {
+            /*
+             * If database creation fails, remove the uploaded document so an
+             * unused/orphaned PO file is not left in storage.
+             */
+            Storage::disk('local')->delete($documentPath);
+
+            throw $exception;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Automatically process the PO order
+        |--------------------------------------------------------------------------
+        |
+        | ProcessOrderJob dispatches the Xero and enrolment jobs.
+        | This happens only after the database transaction succeeds.
+        |
+        */
+
+        ProcessOrderJob::dispatch($order->id);
 
         return redirect()
-            ->route('checkout.thank-you', $checkoutSession->uuid)
+            ->route('checkout.thank-you', $checkoutSession)
             ->with('order_id', $order->id);
     }
 
     /**
-     * Shared guard rails for both show and store.
+     * Protect the Purchase Order checkout.
      */
     private function guardSession(CheckoutSession $checkoutSession): void
     {
-        abort_if($checkoutSession->isExpired(), 410, 'This checkout session has expired.');
-        abort_if($checkoutSession->isCompleted(), 409, 'This checkout session is already completed.');
-        abort_unless($checkoutSession->hasSavedDetails(), 422, 'Student and billing details must be saved first.');
+        abort_unless(
+            auth()->check(),
+            403,
+            'You must be logged in to use purchase order checkout.'
+        );
+
+        abort_unless(
+            auth()->user()->canPayByPurchaseOrder(),
+            403,
+            'You are not authorised to use purchase order checkout.'
+        );
+
+        abort_if(
+            $checkoutSession->isExpired(),
+            410,
+            'This checkout session has expired.'
+        );
+
+        abort_if(
+            $checkoutSession->isCompleted(),
+            409,
+            'This checkout session has already been completed.'
+        );
+
+        abort_unless(
+            $checkoutSession->hasSavedDetails(),
+            422,
+            'Student and billing details must be saved first.'
+        );
     }
 
     /**
-     * student_details may be a list of students, or a single student object.
-     * Normalise to a list so the loop is uniform.
-     *
-     * NOTE: adjust the key names below if your student_details JSON uses
-     * different keys than first_name/last_name/email/phone/date_of_birth.
+     * Ensure student details always use a list structure.
      */
     private function normaliseStudents(array $studentDetails): array
     {
@@ -147,18 +280,24 @@ class PurchaseOrderCheckoutController extends Controller
             return [];
         }
 
-        // Already a list of students.
-        if (array_is_list($studentDetails) && isset($studentDetails[0]) && is_array($studentDetails[0])) {
+        if (
+            array_is_list($studentDetails)
+            && isset($studentDetails[0])
+            && is_array($studentDetails[0])
+        ) {
             return $studentDetails;
         }
 
-        // A single student keyed object.
         return [$studentDetails];
     }
 
+    /**
+     * Build the Xero/order-item description.
+     */
     private function buildItemName(CheckoutSession $session): string
     {
-        $name = $session->course_title ?: ($session->course_code ?: 'Course');
+        $name = $session->course_title
+            ?: ($session->course_code ?: 'Course');
 
         if (! empty($session->plan_title)) {
             $name .= ' - ' . $session->plan_title;
@@ -168,30 +307,70 @@ class PurchaseOrderCheckoutController extends Controller
     }
 
     /**
-     * Best-effort resolution of a Course id from the session's course_code.
-     *
-     * The exact lookup column isn't known here, so we only query columns that
-     * actually exist on the courses table and fall back to null. Confirm that
-     * order_items.course_id is nullable, or wire this to your real Course lookup.
+     * Resolve the checkout session to the correct local Course record.
      */
-    private function resolveCourseId(?string $courseCode): ?int
+    private function resolveCourseId(CheckoutSession $session): ?int
     {
-        if (empty($courseCode) || ! class_exists(Course::class)) {
-            return null;
-        }
+        $rawCourseCode = trim((string) $session->course_code);
+        $planId = trim((string) $session->plan_id);
 
-        $candidateColumns = ['ams_enrolment_code', 'code', 'course_code'];
+        /*
+         * RTO Data may return RIIWHS204E-2, while the local course stores
+         * RIIWHS204E.
+         */
+        $normalisedCourseCode = preg_replace(
+            '/-\d+$/',
+            '',
+            $rawCourseCode
+        );
 
+        $courseCodes = array_values(
+            array_unique(
+                array_filter([
+                    $rawCourseCode,
+                    $normalisedCourseCode,
+                ])
+            )
+        );
+
+        /*
+         * Preferred lookup: course code and AMS plan ID.
+         */
         $course = Course::query()
-            ->where(function (Builder $query) use ($candidateColumns, $courseCode) {
-                foreach ($candidateColumns as $column) {
-                    if (Schema::hasColumn((new Course())->getTable(), $column)) {
-                        $query->orWhere($column, $courseCode);
-                    }
-                }
-            })
+            ->where('ams_plan_id', $planId)
+            ->whereIn('code', $courseCodes)
             ->first();
 
-        return $course?->id;
+        if ($course) {
+            return $course->id;
+        }
+
+        /*
+         * Fallback: match only by exact or normalised course code.
+         */
+        $course = Course::query()
+            ->whereIn('code', $courseCodes)
+            ->first();
+
+        if ($course) {
+            return $course->id;
+        }
+
+        /*
+         * Final fallback: use plan ID only when exactly one course matches.
+         */
+        if ($planId !== '') {
+            $planMatches = Course::query()
+                ->where('ams_plan_id', $planId)
+                ->limit(2)
+                ->get();
+
+            if ($planMatches->count() === 1) {
+                return $planMatches->first()->id;
+            }
+        }
+
+        return null;
     }
 }
+

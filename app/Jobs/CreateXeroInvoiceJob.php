@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\IntegrationLog;
 use App\Models\Order;
 use App\Models\XeroConnection;
+use App\Support\OrderCompletion;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
@@ -18,17 +19,28 @@ class CreateXeroInvoiceJob implements ShouldQueue
 
     public function __construct(
         public int $orderId
-    ) {}
+    ) {
+    }
 
     public function handle(): void
     {
-        $order = Order::with(['student', 'items.course'])->findOrFail($this->orderId);
+        $order = Order::with([
+            'student',
+            'items.course',
+        ])->findOrFail($this->orderId);
 
         /*
-         * Duplicate protection:
-         * If this order already has a Xero invoice, do not create another one.
-         */
+        |--------------------------------------------------------------------------
+        | Duplicate protection
+        |--------------------------------------------------------------------------
+        */
+
         if ($order->xero_invoice_id) {
+            $order->update([
+                'xero_status' => 'success',
+                'xero_error_message' => null,
+            ]);
+
             IntegrationLog::create([
                 'order_id' => $order->id,
                 'service' => 'xero',
@@ -44,6 +56,12 @@ class CreateXeroInvoiceJob implements ShouldQueue
                 ]),
             ]);
 
+            /*
+             * The invoice already exists, so this may be the final condition
+             * required to mark the order as processed.
+             */
+            OrderCompletion::attemptMarkProcessed($order->id);
+
             return;
         }
 
@@ -53,9 +71,6 @@ class CreateXeroInvoiceJob implements ShouldQueue
             throw new \Exception('No active Xero connection found.');
         }
 
-        /*
-         * Mark the order as processing before calling Xero.
-         */
         $order->update([
             'xero_status' => 'processing',
             'xero_error_message' => null,
@@ -73,37 +88,52 @@ class CreateXeroInvoiceJob implements ShouldQueue
 
         try {
             /*
-             * Refresh token if expired.
-             */
+            |--------------------------------------------------------------------------
+            | Refresh the Xero token when required
+            |--------------------------------------------------------------------------
+            */
+
             if ($connection->expires_at && $connection->expires_at->isPast()) {
                 $connection = $this->refreshToken($connection);
             }
 
             /*
-             * Send invoice creation request to Xero.
-             */
+            |--------------------------------------------------------------------------
+            | Create the Xero invoice
+            |--------------------------------------------------------------------------
+            */
+
             $response = Http::withToken($connection->access_token)
                 ->withHeaders([
                     'xero-tenant-id' => $connection->tenant_id,
                     'Accept' => 'application/json',
                 ])
-                ->post('https://api.xero.com/api.xro/2.0/Invoices', $payload);
+                ->post(
+                    'https://api.xero.com/api.xro/2.0/Invoices',
+                    $payload
+                );
 
             if (! $response->successful()) {
-                throw new \Exception('Xero invoice creation failed: ' . $response->body());
+                throw new \Exception(
+                    'Xero invoice creation failed: ' . $response->body()
+                );
             }
 
             $responseData = $response->json();
-
             $invoice = $responseData['Invoices'][0] ?? null;
 
             if (! $invoice) {
-                throw new \Exception('Xero response did not contain invoice data.');
+                throw new \Exception(
+                    'Xero response did not contain invoice data.'
+                );
             }
 
             /*
-             * Save Xero invoice details after Xero successfully returns the invoice.
-             */
+            |--------------------------------------------------------------------------
+            | Save successful Xero result
+            |--------------------------------------------------------------------------
+            */
+
             $order->update([
                 'xero_status' => 'success',
                 'xero_invoice_id' => $invoice['InvoiceID'] ?? null,
@@ -120,10 +150,19 @@ class CreateXeroInvoiceJob implements ShouldQueue
                 'request_payload' => json_encode($payload),
                 'response_payload' => json_encode($responseData),
             ]);
+
+            /*
+             * Xero has succeeded. If enrolment links have also been sent,
+             * this changes the overall order status to processed.
+             */
+            OrderCompletion::attemptMarkProcessed($order->id);
         } catch (Throwable $exception) {
             /*
-             * Save failure details if Xero fails.
-             */
+            |--------------------------------------------------------------------------
+            | Save Xero failure
+            |--------------------------------------------------------------------------
+            */
+
             $order->update([
                 'xero_status' => 'failed',
                 'xero_error_message' => $exception->getMessage(),
@@ -144,52 +183,82 @@ class CreateXeroInvoiceJob implements ShouldQueue
 
     private function buildInvoicePayload(Order $order): array
     {
-        $student = $order->student;
+        $isPurchaseOrder =
+            $order->payment_method === 'purchase_order'
+            && filled($order->purchase_order_number);
+
+        $contactName = trim(
+            ($order->billing_first_name ?? '')
+            . ' '
+            . ($order->billing_last_name ?? '')
+        );
+
+        if (filled($order->billing_company)) {
+            $contactName = $order->billing_company;
+        }
+
+        if ($contactName === '') {
+            $contactName = $order->student?->full_name
+                ?? 'AMS Training Customer';
+        }
+
+        $reference = $isPurchaseOrder
+            ? $order->purchase_order_number
+            : 'Laravel Order #' . $order->id;
 
         return [
             'Invoices' => [
                 [
                     'Type' => 'ACCREC',
+
                     'Contact' => [
-                        'Name' => $student?->full_name ?? 'Test Student',
-                        'EmailAddress' => $student?->email,
+                        'Name' => $contactName,
+                        'EmailAddress' => $order->billing_email
+                            ?: $order->student?->email,
                     ],
+
                     'Date' => now()->toDateString(),
                     'DueDate' => now()->addDays(7)->toDateString(),
-                    'Reference' => 'Laravel Order #' . $order->id,
+                    'Reference' => $reference,
 
                     /*
-                     * Keep DRAFT while testing.
-                     * Later we can change this to AUTHORISED when the mapping is confirmed.
+                     * A DRAFT invoice remains unpaid in Xero.
                      */
                     'Status' => 'DRAFT',
 
-                    /*
-                     * Inclusive means the amount already includes GST.
-                     */
                     'LineAmountTypes' => 'Inclusive',
 
-                    'LineItems' => $order->items->map(function ($item) {
-                        return [
-                            'Description' => $item->name,
-                            'Quantity' => $item->quantity,
-                            'UnitAmount' => (float) $item->unit_price,
+                    'LineItems' => $order->items
+                        ->map(function ($item) use (
+                            $isPurchaseOrder,
+                            $order
+                        ) {
+                            $description = $item->name;
 
-                            /*
-                             * AccountCode 200 and TaxType OUTPUT are basic defaults.
-                             * We should confirm the exact account code from the real Xero chart of accounts.
-                             */
-                            'AccountCode' => '200',
-                            'TaxType' => 'OUTPUT',
-                        ];
-                    })->values()->toArray(),
+                            if ($isPurchaseOrder) {
+                                $description .= PHP_EOL
+                                    . 'Purchase Order: '
+                                    . $order->purchase_order_number;
+                            }
+
+                            return [
+                                'Description' => $description,
+                                'Quantity' => $item->quantity,
+                                'UnitAmount' => (float) $item->unit_price,
+                                'AccountCode' => '200',
+                                'TaxType' => 'OUTPUT',
+                            ];
+                        })
+                        ->values()
+                        ->toArray(),
                 ],
             ],
         ];
     }
 
-    private function refreshToken(XeroConnection $connection): XeroConnection
-    {
+    private function refreshToken(
+        XeroConnection $connection
+    ): XeroConnection {
         $response = Http::asForm()
             ->withBasicAuth(
                 config('services.xero.client_id'),
@@ -201,7 +270,9 @@ class CreateXeroInvoiceJob implements ShouldQueue
             ]);
 
         if (! $response->successful()) {
-            throw new \Exception('Failed to refresh Xero token: ' . $response->body());
+            throw new \Exception(
+                'Failed to refresh Xero token: ' . $response->body()
+            );
         }
 
         $tokenData = $response->json();

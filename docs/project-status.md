@@ -1,6 +1,25 @@
-## Latest progress update
+# Project Status — AMS Laravel Course Management System
 
-### Completed backend/admin reliability work
+## Latest Progress Update
+
+This Laravel project is rebuilding key AMS Training WordPress/WooCommerce workflows into a more controlled Laravel-based system.
+
+The current system now has working backend/admin flows for:
+
+- Course management
+- Orders
+- Students
+- Xero invoice creation
+- Secure enrolment links
+- Laravel enrolment form
+- RTO Data enrolment API
+- File uploads
+- Queue-based processing
+- Filament admin monitoring
+
+---
+
+## Completed Backend/Admin Reliability Work
 
 The Laravel admin backend now has a more usable Orders table.
 
@@ -21,12 +40,14 @@ Orders table now shows:
 
 Status badges now use colours:
 
-- Green for successful/paid/link_sent
-- Grey for pending/skipped
-- Yellow for processing/link_created
-- Red for failed/cancelled
+- Green for successful / paid / link_sent
+- Grey for pending / skipped
+- Yellow for processing / link_created
+- Red for failed / cancelled
 
-### Admin recovery actions completed
+---
+
+## Admin Recovery Actions Completed
 
 The Orders table now includes admin actions for:
 
@@ -39,7 +60,9 @@ The Orders table now includes admin actions for:
 
 The retry action was improved so that if an order is stuck at `link_created`, it can force-resend existing enrolment emails and purchaser confirmation instead of requiring Tinker.
 
-### Real SMTP completed
+---
+
+## Real SMTP Completed
 
 Real SMTP email sending is now working through SMTP2GO.
 
@@ -55,7 +78,24 @@ Local `.env` uses SMTP2GO settings.
 
 Important: `.env` must never be committed to Git.
 
-### Security checkpoint completed
+---
+
+## Xero Integration Completed
+
+Xero invoice creation is working.
+
+Confirmed:
+
+- New Xero credentials work
+- Laravel can create real Xero draft invoices
+- Xero invoice number is stored/displayed
+- Admin can view invoice in Xero
+
+Important: Xero secrets must remain in `.env` only.
+
+---
+
+## Security Checkpoint Completed
 
 After accidentally exposing old secrets, the SMTP/Xero secrets were rotated.
 
@@ -65,33 +105,18 @@ Confirmed:
 - New Xero secret works
 - Laravel can still send real emails
 - Laravel can still create Xero invoices
-- Git working tree is clean
+- Git working tree was checked
 - `.env` is not committed
 
-### Current confirmed backend flow
+Important: RTO Data public key was also pasted during testing. Rotate it if RTO Data allows, or at minimum avoid committing it or sharing it again.
 
-1. Admin creates an order
-2. Admin adds billing details
-3. Admin attaches one or more students
-4. Admin adds order items
-5. Admin marks order as paid
-6. Admin clicks Process Order
-7. Laravel creates a real Xero draft invoice
-8. Laravel creates one enrolment link per student
-9. Laravel sends real student enrolment emails through SMTP2GO
-10. Laravel sends real purchaser confirmation email through SMTP2GO
-11. Admin can resend student emails
-12. Admin can resend purchaser confirmation email
-13. Admin can retry failed or incomplete order processing
+---
 
-### Next planned tasks
+## Secure Enrolment Link Flow Completed
 
-Recommended next tasks:
+The old fake enrolment link flow has been replaced.
 
-1. Twilio SMS job
-2. Secure real enrolment link/token flow
-3. Replace fake `example.com/enrolment/...` links
-4. Improve admin form safety
-5. Auto-calculate or validate subtotal/total
-6. Public course page and checkout planning
-7. Pin Payments integration later
+Laravel now generates secure links like:
+
+```text
+/enrol/{token}
