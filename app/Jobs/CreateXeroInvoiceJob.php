@@ -24,10 +24,11 @@ class CreateXeroInvoiceJob implements ShouldQueue
 
     public function handle(): void
     {
-        $order = Order::with([
-            'student',
-            'items.course',
-        ])->findOrFail($this->orderId);
+      $order = Order::with([
+    'student',
+    'students',
+    'items.course',
+])->findOrFail($this->orderId);
 
         /*
         |--------------------------------------------------------------------------
@@ -205,7 +206,28 @@ class CreateXeroInvoiceJob implements ShouldQueue
         $reference = $isPurchaseOrder
             ? $order->purchase_order_number
             : 'Laravel Order #' . $order->id;
+        $studentDetails = $order->students
+    ->values()
+    ->map(function ($student, int $index): string {
+        $name = trim(
+            ($student->first_name ?? '')
+            . ' '
+            . ($student->last_name ?? '')
+        );
 
+        $details = 'Student ' . ($index + 1) . ': ' . ($name ?: 'Not provided');
+
+        if (filled($student->email)) {
+            $details .= ' | Email: ' . $student->email;
+        }
+
+        if (filled($student->phone)) {
+            $details .= ' | Phone: ' . $student->phone;
+        }
+
+        return $details;
+    })
+    ->implode(PHP_EOL); 
         return [
             'Invoices' => [
                 [
@@ -228,29 +250,38 @@ class CreateXeroInvoiceJob implements ShouldQueue
 
                     'LineAmountTypes' => 'Inclusive',
 
-                    'LineItems' => $order->items
-                        ->map(function ($item) use (
-                            $isPurchaseOrder,
-                            $order
-                        ) {
-                            $description = $item->name;
+                     'LineItems' => $order->items
+    ->map(function ($item) use (
+        $isPurchaseOrder,
+        $order,
+        $studentDetails
+    ) {
+        $description = $item->name;
 
-                            if ($isPurchaseOrder) {
-                                $description .= PHP_EOL
-                                    . 'Purchase Order: '
-                                    . $order->purchase_order_number;
-                            }
+        if ($isPurchaseOrder) {
+            $description .= PHP_EOL
+                . 'Purchase Order: '
+                . $order->purchase_order_number;
+        }
 
-                            return [
-                                'Description' => $description,
-                                'Quantity' => $item->quantity,
-                                'UnitAmount' => (float) $item->unit_price,
-                                'AccountCode' => '200',
-                                'TaxType' => 'OUTPUT',
-                            ];
-                        })
-                        ->values()
-                        ->toArray(),
+        if ($studentDetails !== '') {
+            $description .= PHP_EOL
+                . PHP_EOL
+                . 'Student details:'
+                . PHP_EOL
+                . $studentDetails;
+        }
+
+        return [
+            'Description' => $description,
+            'Quantity' => $item->quantity,
+            'UnitAmount' => (float) $item->unit_price,
+            'AccountCode' => '200',
+            'TaxType' => 'OUTPUT',
+        ];
+    })
+    ->values()
+    ->toArray(),
                 ],
             ],
         ];
