@@ -39,14 +39,27 @@ class Order extends Model
     'xero_sent_at',
     'xero_error_message',
 
+    'invoice_sent_at',
+    'invoice_email_status',
+    'invoice_email_error',
+
     'purchaser_confirmation_sent_at',
+
+    'pin_charge_token',
+    'pin_charge_amount_cents',
+    'card_scheme',
+    'card_display_number',
+    'paid_at',
 ];
 
 protected $casts = [
     'subtotal' => 'decimal:2',
     'total' => 'decimal:2',
     'xero_sent_at' => 'datetime',
+    'invoice_sent_at' => 'datetime',
     'purchaser_confirmation_sent_at' => 'datetime',
+    'pin_charge_amount_cents' => 'integer',
+    'paid_at' => 'datetime',
 ];
 
     public function student(): BelongsTo
@@ -78,5 +91,10 @@ protected $casts = [
     {
         return $this->belongsToMany(Student::class, 'order_students')
             ->withTimestamps();
+    }
+
+    public function paymentAttempts(): HasMany
+    {
+        return $this->hasMany(PaymentAttempt::class);
     }
 }

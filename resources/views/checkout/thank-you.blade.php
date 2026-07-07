@@ -11,7 +11,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Purchase order received — AMS Training</title>
+    <title>{{ ($order?->payment_method ?? null) === 'card' ? 'Payment successful' : 'Purchase order received' }} — AMS Training</title>
     <style>
         :root {
             --ams-navy: #14223f;
@@ -108,21 +108,34 @@
                 </svg>
             </div>
 
-            <h1 class="ams-title">Purchase order received</h1>
+            @php
+                $isCard = ($order?->payment_method ?? null) === 'card';
+                $orderReference = $order?->id ?? session('order_id');
+            @endphp
 
-            @if (session('order_id'))
+            <h1 class="ams-title">{{ $isCard ? 'Payment successful' : 'Purchase order received' }}</h1>
+
+            @if ($orderReference)
                 <p class="ams-order-ref">
-                    Your order reference is <strong>#{{ session('order_id') }}</strong>.
+                    Your order reference is <strong>#{{ $orderReference }}</strong>.
                 </p>
             @endif
 
-            <div class="ams-status">Status: Purchase order received</div>
+            <div class="ams-status">Status: {{ $isCard ? 'Payment received' : 'Purchase order received' }}</div>
 
-            <p class="ams-body">
-                Thank you. AMS Training has received your purchase order and will review it shortly.
-                Once it has been processed, we'll set up the enrolment and send the enrolment details
-                to the email address provided. You don't need to do anything further right now.
-            </p>
+            @if ($isCard)
+                <p class="ams-body">
+                    Thank you. Your card payment was received successfully. We're now setting up the
+                    enrolment, and the enrolment details will be emailed to the address provided.
+                    You don't need to do anything further right now.
+                </p>
+            @else
+                <p class="ams-body">
+                    Thank you. AMS Training has received your purchase order and will review it shortly.
+                    Once it has been processed, we'll set up the enrolment and send the enrolment details
+                    to the email address provided. You don't need to do anything further right now.
+                </p>
+            @endif
 
         </div>
     </div>

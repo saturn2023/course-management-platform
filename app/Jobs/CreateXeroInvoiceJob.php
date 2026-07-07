@@ -4,11 +4,10 @@ namespace App\Jobs;
 
 use App\Models\IntegrationLog;
 use App\Models\Order;
-use App\Models\XeroConnection;
+use App\Services\Xero\XeroService;
 use App\Support\OrderCompletion;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Http;
 use Throwable;
 
 class CreateXeroInvoiceJob implements ShouldQueue
@@ -66,11 +65,11 @@ class CreateXeroInvoiceJob implements ShouldQueue
             return;
         }
 
-        $connection = XeroConnection::where('is_active', true)->first();
+        $xero = app(XeroService::class);
 
-        if (! $connection) {
-            throw new \Exception('No active Xero connection found.');
-        }
+        // Fail fast (before marking the order as processing) if Xero is not
+        // connected, preserving the previous behaviour.
+        $xero->activeConnection();
 
         $order->update([
             'xero_status' => 'processing',
@@ -90,37 +89,13 @@ class CreateXeroInvoiceJob implements ShouldQueue
         try {
             /*
             |--------------------------------------------------------------------------
-            | Refresh the Xero token when required
-            |--------------------------------------------------------------------------
-            */
-
-            if ($connection->expires_at && $connection->expires_at->isPast()) {
-                $connection = $this->refreshToken($connection);
-            }
-
-            /*
-            |--------------------------------------------------------------------------
             | Create the Xero invoice
             |--------------------------------------------------------------------------
+            |
+            | Token refresh is handled inside XeroService::createInvoice().
             */
 
-            $response = Http::withToken($connection->access_token)
-                ->withHeaders([
-                    'xero-tenant-id' => $connection->tenant_id,
-                    'Accept' => 'application/json',
-                ])
-                ->post(
-                    'https://api.xero.com/api.xro/2.0/Invoices',
-                    $payload
-                );
-
-            if (! $response->successful()) {
-                throw new \Exception(
-                    'Xero invoice creation failed: ' . $response->body()
-                );
-            }
-
-            $responseData = $response->json();
+            $responseData = $xero->createInvoice($payload);
             $invoice = $responseData['Invoices'][0] ?? null;
 
             if (! $invoice) {
@@ -151,6 +126,21 @@ class CreateXeroInvoiceJob implements ShouldQueue
                 'request_payload' => json_encode($payload),
                 'response_payload' => json_encode($responseData),
             ]);
+
+            /*
+             * Automatic billing-email delivery is gated behind a config flag
+             * and is intentionally OFF during the DRAFT testing phase — we must
+             * never email a draft invoice to a customer. The invoice ID/number
+             * are still saved above so admins can review it in Xero, and the
+             * order is NOT marked as sent.
+             *
+             * In production (XERO_AUTO_EMAIL_INVOICE=true, alongside
+             * XERO_INVOICE_STATUS=AUTHORISED) the official PDF is emailed
+             * automatically. The job is idempotent via invoice_sent_at.
+             */
+            if (config('services.xero.auto_email_invoice', false)) {
+                SendXeroInvoiceEmailJob::dispatch($order->id);
+            }
 
             /*
              * Xero has succeeded. If enrolment links have also been sent,
@@ -244,9 +234,17 @@ class CreateXeroInvoiceJob implements ShouldQueue
                     'Reference' => $reference,
 
                     /*
-                     * A DRAFT invoice remains unpaid in Xero.
+                     * Invoice status is config-driven (see config/services.php
+                     * services.xero.invoice_status).
+                     *
+                     * Testing phase: DRAFT — the invoice stays unfinalised and
+                     * unsent in Xero; it does NOT post to accounts receivable
+                     * and is not a valid tax invoice for the customer.
+                     *
+                     * Production: set XERO_INVOICE_STATUS=AUTHORISED to finalise
+                     * it as the official tax invoice (and enable auto-email).
                      */
-                    'Status' => 'DRAFT',
+                    'Status' => config('services.xero.invoice_status', 'DRAFT'),
 
                     'LineAmountTypes' => 'Inclusive',
 
@@ -285,35 +283,5 @@ class CreateXeroInvoiceJob implements ShouldQueue
                 ],
             ],
         ];
-    }
-
-    private function refreshToken(
-        XeroConnection $connection
-    ): XeroConnection {
-        $response = Http::asForm()
-            ->withBasicAuth(
-                config('services.xero.client_id'),
-                config('services.xero.client_secret')
-            )
-            ->post('https://identity.xero.com/connect/token', [
-                'grant_type' => 'refresh_token',
-                'refresh_token' => $connection->refresh_token,
-            ]);
-
-        if (! $response->successful()) {
-            throw new \Exception(
-                'Failed to refresh Xero token: ' . $response->body()
-            );
-        }
-
-        $tokenData = $response->json();
-
-        $connection->update([
-            'access_token' => $tokenData['access_token'],
-            'refresh_token' => $tokenData['refresh_token'],
-            'expires_at' => now()->addSeconds($tokenData['expires_in']),
-        ]);
-
-        return $connection->fresh();
     }
 }

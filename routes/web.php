@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CheckoutLoadController;
 use App\Http\Controllers\PurchaseOrderCheckoutController;
 use App\Jobs\SubmitEnrolmentToApiJob;
 use App\Models\CheckoutSession;
+use App\Models\Course;
 use App\Models\Enrolment;
 use App\Models\EnrolmentSubmission;
 use Illuminate\Http\Request;
@@ -331,6 +333,70 @@ Route::get('/enrolment-not-successful', function () {
 Route::get('/mockups/online-refresher-courses', function () {
     return view('mockups.online-refresher-courses');
 })->name('mockups.online-refresher-courses');
+
+/*
+ * DB-powered standalone mockup of the Single Online Refresher Courses block,
+ * rendered via the reusable <x-home.online-refresher-courses> component.
+ * Temporary — for client review only; not part of the live homepage.
+ */
+Route::get('/mockups/online-refresher-courses-live', function () {
+    $courses = Course::query()
+        ->where('status', 'active')
+        ->where('show_on_homepage', true)
+        ->orderBy('display_order')
+        ->orderBy('id')
+        ->get();
+
+    return view('mockups.online-refresher-courses-live', [
+        'courses' => $courses,
+    ]);
+})->name('mockups.online-refresher-courses-live');
+
+/*
+ * Standalone mockup of the reusable site header (<x-layout.header>).
+ * Temporary — for review of the header block in isolation.
+ */
+Route::get('/mockups/header', function () {
+    return view('mockups.header');
+})->name('mockups.header');
+
+/*
+ * Standalone mockup of the hero banner (<x-home.hero-banner>) shown below the
+ * header. Temporary — for review of the block in isolation.
+ */
+Route::get('/mockups/hero-banner', function () {
+    return view('mockups.hero-banner');
+})->name('mockups.hero-banner');
+
+/*
+ * Standalone mockup of the intro text section (<x-home.intro-text>).
+ * Temporary — for review of the block in isolation.
+ */
+Route::get('/mockups/intro-text', function () {
+    return view('mockups.intro-text');
+})->name('mockups.intro-text');
+/*
+| Admin-only payment-method choice page. Only administrators can pay by
+| either method, so only they are offered this choice.
+*/
+Route::get('/checkout/{checkoutSession:uuid}/payment-method', function (
+    CheckoutSession $checkoutSession
+) {
+    abort_if($checkoutSession->isExpired(), 410);
+    abort_if($checkoutSession->isCompleted(), 409);
+    abort_unless($checkoutSession->hasSavedDetails(), 422);
+
+    abort_unless(
+        auth()->check() && auth()->user()->isAdmin(),
+        403,
+        'Only administrators can choose a payment method.'
+    );
+
+    return view('checkout.payment-method', [
+        'session' => $checkoutSession,
+    ]);
+})->name('checkout.payment-method.show');
+
 Route::get('/checkout/{checkoutSession:uuid}/card-payment', function (
     CheckoutSession $checkoutSession
 ) {
@@ -338,7 +404,33 @@ Route::get('/checkout/{checkoutSession:uuid}/card-payment', function (
     abort_if($checkoutSession->isCompleted(), 409);
     abort_unless($checkoutSession->hasSavedDetails(), 422);
 
-    return view('checkout.card-payment-coming-soon', [
+    /*
+     * Access guard: a logged-in PO-only client must never reach card
+     * checkout, even by entering the URL directly. Guests (no user) are
+     * allowed. The future card controller will repeat this same guard.
+     */
+    $user = auth()->user();
+    abort_if(
+        $user && ! $user->canPayByCard(),
+        403,
+        'You are not authorised to use card checkout.'
+    );
+
+    return view('checkout.card-payment', [
         'session' => $checkoutSession,
     ]);
 })->name('checkout.card-payment.show');
+
+Route::post('/checkout/{checkoutSession:uuid}/card-payment', [CardPaymentController::class, 'store'])
+    ->name('checkout.card-payment.store');
+
+Route::get('/checkout/{checkoutSession:uuid}/card-payment/callback', [CardPaymentController::class, 'callback'])
+    ->name('checkout.card-payment.callback');
+
+Route::get('/checkout/{checkoutSession:uuid}/card-payment/received', function (
+    CheckoutSession $checkoutSession
+) {
+    return view('checkout.card-payment-received', [
+        'session' => $checkoutSession,
+    ]);
+})->name('checkout.card-payment.received');

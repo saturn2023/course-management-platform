@@ -6,6 +6,7 @@ use App\Jobs\ProcessOrderJob;
 use App\Jobs\SendEnrolmentEmailJob;
 use App\Jobs\SendEnrolmentSmsJob;
 use App\Jobs\SendPurchaserConfirmationEmailJob;
+use App\Jobs\SendXeroInvoiceEmailJob;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -226,8 +227,8 @@ Action::make('process_order')
     )
     ->modalDescription(fn ($record): string =>
         $record->status === 'po_pending'
-            ? 'This will approve the purchase order, create a draft unpaid Xero invoice, and create enrolment links for the students.'
-            : 'This will create the Xero invoice and enrolment links for the order.'
+            ? 'This will approve the purchase order, create a draft (unsent) Xero invoice for admin review, and create enrolment links for the students.'
+            : 'This will create a draft (unsent) Xero invoice for admin review and create enrolment links for the order.'
     )
     ->action(function ($record) {
         if ($record->status === 'po_pending') {
@@ -378,6 +379,31 @@ Action::make('process_order')
                         Notification::make()
                             ->title('Purchaser confirmation email queued')
                             ->body('The purchaser confirmation email has been queued for resend.')
+                            ->success()
+                            ->send();
+                    }),
+
+                Action::make('resend_invoice')
+                    ->label('Resend invoice')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('warning')
+                    // Hidden during the DRAFT testing phase so a draft invoice
+                    // can never be emailed to a customer. Enabled in production
+                    // via XERO_AUTO_EMAIL_INVOICE=true.
+                    ->visible(fn ($record) =>
+                        config('services.xero.auto_email_invoice', false)
+                        && filled($record->xero_invoice_id)
+                        && (filled($record->billing_email) || filled($record->student?->email))
+                    )
+                    ->requiresConfirmation()
+                    ->modalHeading('Resend Xero invoice')
+                    ->modalDescription('This will re-fetch the official invoice PDF from Xero and email it to the billing email address.')
+                    ->action(function ($record) {
+                        SendXeroInvoiceEmailJob::dispatch($record->id, true);
+
+                        Notification::make()
+                            ->title('Invoice email queued')
+                            ->body('The Xero invoice PDF has been queued for resend to the billing email.')
                             ->success()
                             ->send();
                     }),

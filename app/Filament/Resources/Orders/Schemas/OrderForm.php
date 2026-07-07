@@ -3,10 +3,13 @@
 namespace App\Filament\Resources\Orders\Schemas;
 
 use App\Models\Course;
+use App\Models\Student;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Forms\Components\Hidden;
 class OrderForm
@@ -55,22 +58,26 @@ class OrderForm
                     ->schema([
                         Select::make('student_id')
                             ->label('Student')
-                            ->relationship('student', 'id')
-                            ->searchable()
+                            ->relationship(
+                                name: 'student',
+                                titleAttribute: 'email',
+                            )
+                            ->getOptionLabelFromRecordUsing(
+                                fn (Student $record): string =>
+                                    trim($record->first_name . ' ' . $record->last_name)
+                                    . ' — '
+                                    . $record->email
+                            )
+                            ->searchable([
+                                'first_name',
+                                'last_name',
+                                'email',
+                            ])
+                            ->preload()
                             ->required(),
                     ])
                     ->columnSpanFull()
                     ->defaultItems(1),
-
-                TextInput::make('subtotal')
-                    ->required()
-                    ->numeric()
-                    ->default(0.0),
-
-                TextInput::make('total')
-                    ->required()
-                    ->numeric()
-                    ->default(0.0),
 
                 Select::make('status')
                     ->label('Order status')
@@ -78,32 +85,6 @@ class OrderForm
                         'pending' => 'Pending',
                         'paid' => 'Paid',
                         'cancelled' => 'Cancelled',
-                    ])
-                    ->required()
-                    ->default('pending'),
-
-                Select::make('xero_status')
-                    ->label('Xero status')
-                    ->options([
-                        'pending' => 'Pending',
-                        'processing' => 'Processing',
-                        'success' => 'Success',
-                        'failed' => 'Failed',
-                        'skipped' => 'Skipped',
-                    ])
-                    ->required()
-                    ->default('pending'),
-
-                Select::make('enrolment_status')
-                    ->label('Enrolment status')
-                    ->options([
-                        'pending' => 'Pending',
-                        'processing' => 'Processing',
-                        'link_created' => 'Link created',
-                        'link_sent' => 'Link sent',
-                        'completed' => 'Completed',
-                        'failed' => 'Failed',
-                        'skipped' => 'Skipped',
                     ])
                     ->required()
                     ->default('pending'),
@@ -166,7 +147,51 @@ class OrderForm
                     ])
                     ->columns(2)
                     ->columnSpanFull()
-                    ->defaultItems(1),
+                    ->defaultItems(1)
+                    ->addable(false)
+                    ->deletable(false)
+                    ->reorderable(false),
+
+                Section::make('Processing status')
+                    ->description('Updated automatically by background jobs. Not manually editable.')
+                    ->schema([
+                        TextEntry::make('xero_status')
+                            ->label('Xero status')
+                            ->badge()
+                            ->formatStateUsing(fn (?string $state): string => match ($state) {
+                                'pending' => 'Pending',
+                                'processing' => 'Processing',
+                                'success' => 'Success',
+                                'failed' => 'Failed',
+                                default => (string) $state,
+                            })
+                            ->color(fn (?string $state): string => match ($state) {
+                                'success' => 'success',
+                                'processing' => 'info',
+                                'failed' => 'danger',
+                                default => 'warning',
+                            }),
+
+                        TextEntry::make('enrolment_status')
+                            ->label('Enrolment status')
+                            ->badge()
+                            ->formatStateUsing(fn (?string $state): string => match ($state) {
+                                'pending' => 'Pending',
+                                'processing' => 'Processing',
+                                'link_created' => 'Link created',
+                                'link_sent' => 'Link sent',
+                                'failed' => 'Failed',
+                                default => (string) $state,
+                            })
+                            ->color(fn (?string $state): string => match ($state) {
+                                'link_sent' => 'success',
+                                'processing', 'link_created' => 'info',
+                                'failed' => 'danger',
+                                default => 'warning',
+                            }),
+                    ])
+                    ->columns(2)
+                    ->columnSpanFull(),
 
                 TextInput::make('xero_invoice_id')
                     ->default(null)

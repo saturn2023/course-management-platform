@@ -111,9 +111,20 @@ public function saveDetails(
 
     $user = auth()->user();
 
-    if ($user && $user->canPayByPurchaseOrder()) {
+    /*
+     * Routing by access type:
+     *  - PO-only client  -> purchase order checkout
+     *  - admin (both)    -> payment-method choice page
+     *  - guest / normal  -> card checkout
+     */
+    if ($user && $user->isPurchaseOrderOnlyClient()) {
         return redirect()
             ->route('checkout.purchase-order.show', $checkoutSession);
+    }
+
+    if ($user && $user->isAdmin()) {
+        return redirect()
+            ->route('checkout.payment-method.show', $checkoutSession);
     }
 
     return redirect()

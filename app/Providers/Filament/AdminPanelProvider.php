@@ -52,8 +52,11 @@ class AdminPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
+            ->brandLogo(asset('images/AMS-Training-Logo.png'))
+            ->brandLogoHeight('2.5rem')
             ->authMiddleware([
                 Authenticate::class,
             ]);
+            
     }
 }

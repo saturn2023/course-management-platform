@@ -156,16 +156,22 @@ class PurchaseOrderCheckoutController extends Controller
                 $firstStudentId = null;
 
                 foreach ($students as $studentData) {
-                    $student = Student::create([
-                        'first_name' => $studentData['first_name'] ?? null,
-                        'last_name' => $studentData['last_name'] ?? null,
-                        'email' => $studentData['email'] ?? null,
-                        'phone' => $studentData['phone'] ?? null,
-                        'date_of_birth' =>
-                            $studentData['date_of_birth'] ?? null,
-                    ]);
+                    // Email is the unique student identity (case-insensitive,
+                    // trimmed). Reuse and refresh an existing student rather
+                    // than creating a duplicate.
+                    $email = strtolower(trim((string) ($studentData['email'] ?? '')));
 
-                    $order->students()->attach($student->id);
+                    $student = Student::updateOrCreate(
+                        ['email' => $email],
+                        [
+                            'first_name' => $studentData['first_name'] ?? null,
+                            'last_name' => $studentData['last_name'] ?? null,
+                            'phone' => $studentData['phone'] ?? null,
+                            'date_of_birth' => $studentData['date_of_birth'] ?? null,
+                        ]
+                    );
+
+                    $order->students()->syncWithoutDetaching([$student->id]);
 
                     $firstStudentId ??= $student->id;
                 }

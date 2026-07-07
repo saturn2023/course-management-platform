@@ -38,6 +38,25 @@ return [
     'client_id' => env('XERO_CLIENT_ID'),
     'client_secret' => env('XERO_CLIENT_SECRET'),
     'redirect_uri' => env('XERO_REDIRECT_URI'),
+
+    /*
+     |--------------------------------------------------------------------------
+     | Invoice lifecycle flags
+     |--------------------------------------------------------------------------
+     |
+     | Current testing phase: invoices are created as DRAFT and automatic
+     | billing-email delivery is OFF, so a draft invoice is never sent to a
+     | customer. Admins review the invoice directly in Xero.
+     |
+     | To go to production, set in .env:
+     |   XERO_INVOICE_STATUS=AUTHORISED      (finalise as official tax invoice)
+     |   XERO_AUTO_EMAIL_INVOICE=true        (auto-email the official PDF)
+     |
+     | These are the only two switches needed to enable automatic billing-email
+     | delivery — the XeroService and SendXeroInvoiceEmailJob are already wired.
+     */
+    'invoice_status' => env('XERO_INVOICE_STATUS', 'DRAFT'),
+    'auto_email_invoice' => env('XERO_AUTO_EMAIL_INVOICE', false),
 ],
 'enrolment_api' => [
     'enabled' => env('ENROLMENT_API_ENABLED', false),
@@ -47,5 +66,12 @@ return [
     'origin' => env('ENROLMENT_API_ORIGIN', config('app.url')),
     'timeout' => env('ENROLMENT_API_TIMEOUT', 30),
     'connect_timeout' => env('ENROLMENT_API_CONNECT_TIMEOUT', 10),
+],
+
+'pin' => [
+    'publishable_key' => env('PIN_PUBLISHABLE_KEY'),
+    'secret_key' => env('PIN_SECRET_KEY'),
+    'base_url' => env('PIN_BASE_URL', 'https://test-api.pinpayments.com/1'),
+    'sandbox' => env('PIN_SANDBOX', true),
 ],
 ];

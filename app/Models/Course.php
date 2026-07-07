@@ -16,6 +16,20 @@ class Course extends Model
         'status',
         'ams_enrolment_code',
          'ams_plan_id',
+
+        // Frontend homepage card fields.
+        'card_title',
+        'image_path',
+        'icon_path',
+        'banner_text',
+        'course_url',
+        'display_order',
+        'show_on_homepage',
+    ];
+
+    protected $casts = [
+        'display_order' => 'integer',
+        'show_on_homepage' => 'boolean',
     ];
 
     public function orderItems(): HasMany

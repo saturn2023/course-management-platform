@@ -22,8 +22,20 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
-        <!-- <env name="DB_CONNECTION" value="sqlite"/> -->
-        <!-- <env name="DB_DATABASE" value=":memory:"/> -->
+        <!--
+            Automated tests use an isolated in-memory SQLite database for speed.
+            SQLite shares the "multiple NULLs allowed in a UNIQUE index" semantics
+            this schema relies on, so the duplicate-payment uniqueness guarantees
+            are meaningfully exercised here.
+
+            IMPORTANT: SQLite in-memory does NOT exercise real row-level locking
+            or transaction concurrency. The locking / two-tabs / refresh-during-3DS
+            behaviour MUST also be tested against a dedicated MySQL test database
+            before production. NEVER point automated tests at the normal
+            development database (RefreshDatabase would drop it).
+        -->
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
