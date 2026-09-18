@@ -13,7 +13,12 @@
     - All styles scoped under .ams-refresher so other pages are unaffected.
 --}}
 
-@props(['courses' => collect()])
+{{--
+    headerOnly: render just the heading/subtitle/NRT-logo row and skip the card
+    grid (and the "no courses" message). Used while the homepage is being rebuilt
+    section by section. Defaults to false, so existing usages are unaffected.
+--}}
+@props(['courses' => collect(), 'headerOnly' => false])
 
 @php
     $visibleCourses = collect($courses)
@@ -57,6 +62,7 @@
         /* Scoped to .ams-refresher so this block never affects other pages. */
         .ams-refresher {
             --ams-green: #39B54A;
+            --ams-green-dark: #2f9e3f;
             --ams-green-soft: #E2EEE4;
             --ams-green-soft-hover: #d3e7c8;
             --ams-title: #2C2C2C;
@@ -73,8 +79,9 @@
             box-sizing: border-box;
         }
 
+        /* Boxed content area — Elementor's is ~1360px. */
         .ams-refresher .arc-inner {
-            max-width: 1200px;
+            max-width: 1360px;
             margin: 0 auto;
         }
 
@@ -130,13 +137,26 @@
             align-items: stretch;
         }
 
-        /* Flat cards (no border/shadow/radius) to match the Elementor design. */
+        /* Flat cards (no border/shadow/radius) to match the Elementor design.
+           The whole card is clickable when the course has a URL. */
         .ams-refresher .arc-card {
             background: #ffffff;
             overflow: hidden;
             display: flex;
             flex-direction: column;
             height: 100%;
+            text-decoration: none;
+            color: inherit;
+            transition: box-shadow 0.15s ease;
+        }
+
+        .ams-refresher a.arc-card:hover {
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.10);
+        }
+
+        .ams-refresher .arc-card:focus-visible {
+            outline: 3px solid var(--ams-green);
+            outline-offset: 2px;
         }
 
         .ams-refresher .arc-image-wrap {
@@ -221,7 +241,7 @@
         .ams-refresher .arc-name {
             color: var(--ams-title);
             font-family: var(--font-body);
-            font-size: 25px;
+            font-size: 22px;
             font-weight: 500;
             line-height: 1.2;
             margin: 0;
@@ -232,11 +252,18 @@
             min-height: 2.4em;
         }
 
-        /* 30px between title and button, and 30px from button to card bottom. */
+        /*
+         * 30px between title and button, and 30px from button to card bottom.
+         * `margin-top: auto` is what pins the button to the bottom of the flex
+         * column, so the buttons line up across the row even when one card's
+         * title wraps to fewer lines than another's.
+         */
         .ams-refresher .arc-actions {
             padding: 30px 16px 30px;
+            margin-top: auto;
         }
 
+        /* Pale green, not solid — matches the Elementor button. */
         .ams-refresher .arc-btn {
             display: block;
             width: 100%;
@@ -254,21 +281,16 @@
             transition: background 0.15s ease;
         }
 
-        .ams-refresher .arc-btn:hover {
+        /* Card is the link — deepen the pale green when the card is hovered. */
+        .ams-refresher a.arc-card:hover .arc-btn {
             background: var(--ams-green-soft-hover);
         }
 
-        .ams-refresher .arc-btn:focus-visible {
-            outline: 3px solid var(--ams-green);
-            outline-offset: 2px;
-        }
-
-        /* Disabled state when course_url is missing — same footprint. */
+        /* Disabled state when the course has no slug — same footprint. */
         .ams-refresher .arc-btn.is-disabled {
             background: #eef0f2;
             color: #9aa0a8;
             cursor: not-allowed;
-            pointer-events: none;
         }
 
         .ams-refresher .arc-empty {
@@ -332,7 +354,9 @@
             @endif
         </div>
 
-        @if ($visibleCourses->isEmpty())
+        @if ($headerOnly)
+            {{-- Cards intentionally not rendered yet. --}}
+        @elseif ($visibleCourses->isEmpty())
             <p class="arc-empty">No courses are currently available.</p>
         @else
             <div class="arc-grid">
@@ -348,10 +372,18 @@
                         $displayTitle = filled($course->card_title)
                             ? $course->card_title
                             : $course->title;
-                        $hasUrl = filled($course->course_url);
+                        // The public course page, derived from the admin's
+                        // Slug field. Null for a course with no slug, which
+                        // renders the card as a non-clickable article.
+                        $courseUrl = $course->detailUrl();
+                        $hasUrl = filled($courseUrl);
                     @endphp
 
-                    <article class="arc-card">
+                    @if ($hasUrl)
+                        <a class="arc-card" href="{{ $courseUrl }}">
+                    @else
+                        <article class="arc-card">
+                    @endif
                         <div class="arc-image-wrap">
                             @if ($iconUrl)
                                 <span class="arc-icon">
@@ -376,13 +408,13 @@
                         </div>
 
                         <div class="arc-actions">
-                            @if ($hasUrl)
-                                <a href="{{ $course->course_url }}" class="arc-btn">View course</a>
-                            @else
-                                <span class="arc-btn is-disabled" aria-disabled="true">View course</span>
-                            @endif
+                            <span class="arc-btn @unless ($hasUrl) is-disabled @endunless">View course</span>
                         </div>
-                    </article>
+                    @if ($hasUrl)
+                        </a>
+                    @else
+                        </article>
+                    @endif
                 @endforeach
             </div>
         @endif

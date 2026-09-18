@@ -5,12 +5,23 @@ namespace App\Http\Controllers;
 use App\Models\XeroConnection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
+/**
+ * Xero OAuth 2.0 authorisation code flow.
+ *
+ * Both endpoints are admin-only (see routes/web.php). The callback writes the
+ * credentials every subsequent Xero API call depends on, so it must never be
+ * reachable by a non-admin. Tokens are written straight to xero_connections
+ * and are never rendered back to the browser.
+ */
 class XeroAuthController extends Controller
 {
-    public function connect()
+    public function connect(Request $request)
     {
+        $this->authoriseAdmin($request);
+
         $state = Str::random(40);
 
         session(['xero_oauth_state' => $state]);
@@ -20,10 +31,10 @@ class XeroAuthController extends Controller
             'client_id' => config('services.xero.client_id'),
             'redirect_uri' => config('services.xero.redirect_uri'),
             'scope' => implode(' ', [
-    'offline_access',
-    'accounting.contacts',
-    'accounting.invoices',
-]) ,
+                'offline_access',
+                'accounting.contacts',
+                'accounting.invoices',
+            ]),
             'state' => $state,
         ]);
 
@@ -32,6 +43,8 @@ class XeroAuthController extends Controller
 
     public function callback(Request $request)
     {
+        $this->authoriseAdmin($request);
+
         if ($request->get('state') !== session('xero_oauth_state')) {
             abort(403, 'Invalid Xero OAuth state.');
         }
@@ -52,11 +65,17 @@ class XeroAuthController extends Controller
             ]);
 
         if (! $tokenResponse->successful()) {
-            dd([
-                'message' => 'Failed to get Xero token',
+            /*
+             * Never dump the response body to the browser: the previous dd()
+             * echoed the raw Xero error (and the request context around it)
+             * onto the page. Log the status only.
+             */
+            Log::error('Xero token exchange failed.', [
                 'status' => $tokenResponse->status(),
-                'body' => $tokenResponse->json(),
             ]);
+
+            return redirect('/admin')
+                ->with('error', 'Could not complete the Xero connection (token exchange failed). Please try again.');
         }
 
         $tokenData = $tokenResponse->json();
@@ -65,11 +84,12 @@ class XeroAuthController extends Controller
             ->get('https://api.xero.com/connections');
 
         if (! $connectionsResponse->successful()) {
-            dd([
-                'message' => 'Failed to get Xero connections',
+            Log::error('Xero connections lookup failed.', [
                 'status' => $connectionsResponse->status(),
-                'body' => $connectionsResponse->json(),
             ]);
+
+            return redirect('/admin')
+                ->with('error', 'Could not read the connected Xero organisations. Please try again.');
         }
 
         $connections = $connectionsResponse->json();
@@ -94,5 +114,14 @@ class XeroAuthController extends Controller
         session()->forget('xero_oauth_state');
 
         return redirect('/admin')->with('success', 'Xero connected successfully.');
+    }
+
+    /**
+     * Connecting Xero rewrites the credentials used for all invoicing, so it
+     * is restricted to admins rather than any authenticated customer.
+     */
+    private function authoriseAdmin(Request $request): void
+    {
+        abort_unless((bool) $request->user()?->is_admin, 403);
     }
 }

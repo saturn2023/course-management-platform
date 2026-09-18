@@ -7,6 +7,7 @@ use App\Jobs\ProcessOrderJob;
 use App\Models\CheckoutSession;
 use App\Models\IntegrationLog;
 use App\Models\PaymentAttempt;
+use App\Services\CheckoutDetailsWriter;
 use App\Services\CheckoutOrderCreator;
 use App\Services\Pin\PinPaymentResult;
 use App\Services\PinPaymentsClient;
@@ -21,6 +22,7 @@ class CardPaymentController extends Controller
     public function __construct(
         private PinPaymentsClient $pin,
         private CheckoutOrderCreator $orderCreator,
+        private CheckoutDetailsWriter $detailsWriter,
     ) {
     }
 
@@ -33,7 +35,23 @@ class CardPaymentController extends Controller
     {
         $this->guardCardCheckout($checkoutSession);
 
-        $cardToken = (string) $request->validated()['card_token'];
+        $validated = $request->validated();
+
+        /*
+         * Registration and payment are one page, so the student and billing
+         * details arrive with this POST. They are persisted before the charge
+         * so the order built afterwards has everything it needs — and so a
+         * declined card leaves the details saved for the retry.
+         */
+        $this->detailsWriter->save(
+            $checkoutSession,
+            $validated['students'],
+            $validated['billing'],
+        );
+
+        $checkoutSession->refresh();
+
+        $cardToken = (string) $validated['card_token'];
 
         // Transaction 1: claim. Lock the session, reject duplicates, create the
         // in-flight PaymentAttempt, then commit BEFORE calling Pin.
@@ -109,7 +127,7 @@ class CardPaymentController extends Controller
 
         if ($attempt->state !== PaymentAttempt::STATE_THREE_D_SECURE_PENDING) {
             return redirect()
-                ->route('checkout.card-payment.show', $checkoutSession)
+                ->route('checkout.show', $checkoutSession)
                 ->withErrors(['card' => 'This payment could not be completed. Please try again.']);
         }
 
@@ -366,7 +384,7 @@ class CardPaymentController extends Controller
         });
 
         return redirect()
-            ->route('checkout.card-payment.show', $session)
+            ->route('checkout.show', $session)
             ->withErrors(['card' => 'Your payment could not be completed. Please check your card details and try again.']);
     }
 
@@ -379,7 +397,6 @@ class CardPaymentController extends Controller
     {
         abort_if($session->isExpired(), 410, 'This checkout session has expired.');
         abort_if($session->isCompleted(), 409, 'This checkout has already been completed.');
-        abort_unless($session->hasSavedDetails(), 422, 'Student and billing details must be saved first.');
 
         $user = auth()->user();
         abort_if(

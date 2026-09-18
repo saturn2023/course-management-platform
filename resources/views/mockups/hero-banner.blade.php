@@ -9,11 +9,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mockup — Hero Banner</title>
+    <x-layout.fonts />
 
     {{-- Intro section paragraph font: Outfit (Google Fonts) --}}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    {{-- 500 (accordion titles) and 700 (enrolment heading) added for
+         <x-home.enrolment-process />; the other weights are unchanged. --}}
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     {{-- Intro heading font: Normalidad Compact (Adobe Fonts / Typekit, project sat8ost) --}}
     <link rel="stylesheet" href="https://use.typekit.net/sat8ost.css">
@@ -27,30 +30,14 @@
             color: #333;
         }
 
-        .mockup-body {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 48px 24px;
-        }
-
-        .mockup-body h2 {
-            color: #1b2a4a;
-        }
-
-        .mockup-body p {
-            line-height: 1.6;
-            color: #55606e;
-            max-width: 720px;
-        }
-
-        .mockup-spacer {
-            height: 120vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #b3bcc7;
-            border-top: 1px dashed #d6dce3;
-        }
+        /*
+         * The .mockup-body / .mockup-spacer dummy-content rules were removed
+         * with the markup that used them: a 120vh spacer that existed only to
+         * give the sticky header something to scroll against. The real homepage
+         * sections now provide far more than a viewport of scroll, and it was
+         * sitting after the footer, adding a screen and a bit of empty page
+         * below it. Nothing else on this page used those classes.
+         */
     </style>
 </head>
 <body>
@@ -60,8 +47,20 @@
 
     <x-home.intro-text />
 
-    <main class="mockup-body">
-        <div class="mockup-spacer">Keep scrolling to test the sticky header…</div>
-    </main>
+    <x-home.online-refresher-courses :courses="$courses" />
+
+    <x-home.package-refresher-courses :packages="$packages" />
+
+    <x-home.about-banner />
+
+    <x-home.experience-section />
+
+    <x-home.first-field-section />
+
+    <x-home.enrolment-process :steps="$enrolmentSteps" />
+
+    <x-home.reviews :reviews="$reviews" />
+
+    <x-layout.footer />
 </body>
 </html>

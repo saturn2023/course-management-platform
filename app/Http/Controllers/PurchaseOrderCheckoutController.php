@@ -2,32 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\SubmitPurchaseOrderRequest;
 use App\Jobs\ProcessOrderJob;
 use App\Models\CheckoutSession;
 use App\Models\Course;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Student;
-use Illuminate\Contracts\View\View;
+use App\Services\CheckoutDetailsWriter;
+use App\Support\OrderAttribution;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class PurchaseOrderCheckoutController extends Controller
 {
-    /**
-     * Show the Purchase Order checkout page.
-     */
-    public function show(CheckoutSession $checkoutSession): View
-    {
-        $this->guardSession($checkoutSession);
-
-        return view('checkout.purchase-order', [
-            'session' => $checkoutSession,
-            'billing' => $checkoutSession->billing_details ?? [],
-        ]);
+    public function __construct(
+        private CheckoutDetailsWriter $detailsWriter,
+    ) {
     }
 
     /**
@@ -41,24 +34,25 @@ class PurchaseOrderCheckoutController extends Controller
      * - purchaser confirmation email
      */
     public function store(
-        Request $request,
+        SubmitPurchaseOrderRequest $request,
         CheckoutSession $checkoutSession
     ): RedirectResponse {
         $this->guardSession($checkoutSession);
 
-        $validated = $request->validate([
-            'purchase_order_number' => [
-                'required',
-                'string',
-                'max:100',
-            ],
-            'purchase_order_document' => [
-                'required',
-                'file',
-                'mimes:pdf,jpg,jpeg,png',
-                'max:25600',
-            ],
-        ]);
+        $validated = $request->validated();
+
+        /*
+         * Registration and payment are one page, so the student and billing
+         * details arrive with this POST. Persist them first, then build the
+         * order from the session exactly as before.
+         */
+        $this->detailsWriter->save(
+            $checkoutSession,
+            $validated['students'],
+            $validated['billing'],
+        );
+
+        $checkoutSession->refresh();
 
         $billing = $checkoutSession->billing_details ?? [];
         $students = $this->normaliseStudents(
@@ -135,6 +129,12 @@ class PurchaseOrderCheckoutController extends Controller
                      * Processing begins automatically after checkout.
                      */
                     'status' => 'processing',
+
+                    /*
+                     * First-touch marketing attribution captured when the
+                     * visitor first landed on the site.
+                     */
+                    'origin' => OrderAttribution::forOrder(),
 
                     /*
                      * The Xero invoice will be created as DRAFT/unpaid.
@@ -268,12 +268,6 @@ class PurchaseOrderCheckoutController extends Controller
             $checkoutSession->isCompleted(),
             409,
             'This checkout session has already been completed.'
-        );
-
-        abort_unless(
-            $checkoutSession->hasSavedDetails(),
-            422,
-            'Student and billing details must be saved first.'
         );
     }
 

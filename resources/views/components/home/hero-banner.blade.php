@@ -85,6 +85,13 @@
             );
         }
 
+        /*
+         * Same container and position as before — only the internal stacking
+         * changes: a flex column with a 10px gap (Elementor's row/column gap), so
+         * the space between the eyebrow and the heading is controlled here rather
+         * than by heading margins. Items stay full-width (default `stretch`), so
+         * the heading's own max-width still governs where it wraps.
+         */
         .ams-hero__inner {
             position: relative;
             z-index: 2;
@@ -92,24 +99,43 @@
             max-width: 1280px;
             margin: 0 auto;
             padding: 40px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
 
+        /*
+         * Bottom margin removed — the 10px gap on __inner is now the only thing
+         * separating the eyebrow from the heading. The pre-existing 1px
+         * letter-spacing is kept deliberately.
+         */
         .ams-hero__eyebrow {
-            margin: 0 0 14px;
+            margin: 0;
             color: #ffffff;
             font-family: 'normalidad-compact', 'Segoe UI', Arial, sans-serif;
-            font-size: 0.95rem;
-            font-weight: 700;
+            font-size: 20px;
+            font-weight: 600;
+            line-height: 1.3em;
+            text-transform: uppercase;
             letter-spacing: 1px;
         }
 
+        /*
+         * font-weight 300 is stated explicitly (not inherited) so the <h1> does
+         * not fall back to the UA's bold. Note the Typekit kit only ships
+         * normalidad-wide at 400 and 700, so 300 resolves to the 400 face — which
+         * is still much lighter than the 800 this used to request.
+         */
         .ams-hero__heading {
             margin: 0;
             color: #ffffff;
             font-family: 'normalidad-wide', 'Segoe UI', Arial, sans-serif;
-            font-size: clamp(2rem, 4vw, 3.2rem);
-            font-weight: 800;
-            line-height: 1.15;
+            font-size: 43px;
+            font-weight: 300;
+            font-style: normal;
+            line-height: 1.3em;
+            text-transform: none;
+            text-decoration: none;
             max-width: 640px;
             text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
         }

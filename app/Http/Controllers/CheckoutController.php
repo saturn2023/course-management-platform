@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\SaveCheckoutDetailsRequest;
 use App\Http\Requests\UpdateCheckoutQuantityRequest;
 use App\Models\CheckoutSession;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 
 class CheckoutController extends Controller
@@ -77,59 +75,6 @@ class CheckoutController extends Controller
             'formatted_subtotal' => '$' . number_format($subtotal, 2),
         ]);
     }
-
-public function saveDetails(
-    SaveCheckoutDetailsRequest $request,
-    CheckoutSession $checkoutSession
-): RedirectResponse {
-    if ($checkoutSession->isCompleted()) {
-        return redirect()
-            ->route('checkout.show', $checkoutSession)
-            ->withErrors([
-                'checkout' => 'This checkout has already been completed.',
-            ]);
-    }
-
-    if ($checkoutSession->isExpired()) {
-        return redirect()
-            ->route('checkout.show', $checkoutSession)
-            ->withErrors([
-                'checkout' => 'This checkout link has expired. Please start your enrolment again.',
-            ]);
-    }
-
-    $validated = $request->validated();
-
-    $students = $validated['students'];
-    $billing = $validated['billing'];
-
-    $checkoutSession->update([
-        'student_details' => $students,
-        'billing_details' => $billing,
-        'details_completed_at' => now(),
-    ]);
-
-    $user = auth()->user();
-
-    /*
-     * Routing by access type:
-     *  - PO-only client  -> purchase order checkout
-     *  - admin (both)    -> payment-method choice page
-     *  - guest / normal  -> card checkout
-     */
-    if ($user && $user->isPurchaseOrderOnlyClient()) {
-        return redirect()
-            ->route('checkout.purchase-order.show', $checkoutSession);
-    }
-
-    if ($user && $user->isAdmin()) {
-        return redirect()
-            ->route('checkout.payment-method.show', $checkoutSession);
-    }
-
-    return redirect()
-        ->route('checkout.card-payment.show', $checkoutSession);
-}
 
     private function requiresCapacityCheck(CheckoutSession $session): bool
     {

@@ -89,6 +89,13 @@ class OrderForm
                     ->required()
                     ->default('pending'),
 
+                // First-touch marketing attribution captured at checkout.
+                // Read-only: it records where the sale actually came from.
+                TextInput::make('origin')
+                    ->label('Order origin')
+                    ->disabled()
+                    ->placeholder('Unknown'),
+
                 Repeater::make('items')
                     ->label('Order Items')
                     ->relationship('items')

@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentAttempt;
 use App\Models\Student;
+use App\Support\OrderAttribution;
 
 /**
  * Creates a paid card Order from a CheckoutSession + confirmed PaymentAttempt.
@@ -56,6 +57,11 @@ class CheckoutOrderCreator
             'total' => $session->subtotal,
 
             'status' => 'processing',
+
+            // First-touch marketing attribution captured when the visitor
+            // first landed on the site (see App\Support\OrderAttribution).
+            'origin' => OrderAttribution::forOrder(),
+
             'xero_status' => 'pending',
             'enrolment_status' => 'pending',
 

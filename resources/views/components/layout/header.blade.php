@@ -7,18 +7,19 @@
     - Sticky dark header matching the Elementor reference.
     - Shrinks on scroll: past 10px it gains .elementor-sticky--effects, reducing
       header height/padding, shrinking the logo, and adding a shadow.
-    - Desktop: logo left, pill search centre, nav right.
-    - Tablet/mobile: logo left + hamburger; search stacks full width; nav collapses.
+    - Desktop: logo left, nav right.
+    - Tablet/mobile: logo left + hamburger; nav collapses.
     - All styles scoped under .ams-site-header so admin/other pages are unaffected.
-    - Search is currently VISUAL-ONLY (no course search route exists yet).
 --}}
 
 @php
     // Static nav for now. These routes may not exist yet — links still render.
+    // Certificate Check is not in this list: it is the green pill button rendered
+    // as the first item of the nav row, and it opens the RTODATA modal in-page
+    // rather than navigating (no /certificate-check route exists).
     $navLinks = [
         ['label' => 'Home', 'url' => '/'],
         ['label' => 'About', 'url' => '/about'],
-        ['label' => 'Certificate Check', 'url' => '/certificate-check'],
         ['label' => 'Student Info', 'url' => '/student-info'],
         ['label' => 'Contact', 'url' => '/contact'],
     ];
@@ -58,11 +59,19 @@
             transition: background-color 0.4s ease, box-shadow 0.4s ease;
         }
 
+        /*
+         * Horizontal padding is 7%, not 2%: in the Elementor reference the logo
+         * sits ~133px in from the viewport edge (and "Contact" the same distance
+         * from the right), which is ~7% of the 1900px container. 2% (~38px) is
+         * what pushed the logo and nav to the extremes and opened up the dead
+         * space in the middle. Vertical padding stays at 2% (~38px), which does
+         * match the reference.
+         */
         .ams-site-header__inner {
             max-width: 1900px;
             margin: 0 auto;
             min-height: 92px;
-            padding: 2%;
+            padding: 2% 7%;
             display: flex;
             align-items: center;
             gap: 28px;
@@ -75,10 +84,16 @@
             line-height: 0;
         }
 
+        /*
+         * 112px ≈ 60% of the 225px Elementor image-widget width, and matches the
+         * logo size in the reference screenshot. The header has no fixed height —
+         * it is logo height + vertical padding — so this is also what brings the
+         * header down from ~176px to ~155px.
+         */
         .ams-site-header__logo {
             display: block;
-            width: 140px;
-            max-width: 140px;
+            width: 112px;
+            max-width: 112px;
             height: auto;
             transition: width 0.4s ease, max-width 0.4s ease;
             transform-origin: left center;
@@ -87,58 +102,14 @@
             left: 0;
         }
 
-        /* Search pill, centre, grows to fill available space. */
-        .ams-site-header__search {
-            flex: 1 1 auto;
-            max-width: 640px;
-            margin: 0 auto;
-            display: flex;
-            align-items: center;
-            background: #ffffff;
-            border-radius: 999px;
-            padding: 4px 6px 4px 18px;
-        }
-
-        .ams-site-header__search input {
-            flex: 1 1 auto;
-            border: none;
-            outline: none;
-            background: transparent;
-            font-size: 0.95rem;
-            color: #333;
-            height: 44px;
-            padding: 0 4px;
-            transition: height 0.4s ease;
-        }
-
-        .ams-site-header__search button {
-            flex: 0 0 auto;
-            border: none;
-            cursor: pointer;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: var(--ash-green);
-            color: #ffffff;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.15s ease;
-        }
-
-        .ams-site-header__search button:hover {
-            background: #4a9637;
-        }
-
-        .ams-site-header__search svg {
-            width: 18px;
-            height: 18px;
-            display: block;
-        }
-
-        /* Right-hand navigation. */
+        /*
+         * Navigation takes the remaining width and right-aligns its own links,
+         * rather than being shoved right by `margin-left: auto` / space-between.
+         * Same visual result, but the gap between logo and nav is then governed
+         * by the container inset above, which is what actually controls it.
+         */
         .ams-site-header__nav {
-            flex: 0 0 auto;
+            flex: 1 1 auto;
         }
 
         .ams-site-header__nav-list {
@@ -147,14 +118,17 @@
             padding: 0;
             display: flex;
             align-items: center;
-            gap: 26px;
+            justify-content: flex-end;
+            gap: 34px;
         }
 
+        /* Nav typography matches Elementor: Roboto 600. Size/line-height unchanged. */
         .ams-site-header__nav-link {
             color: var(--ash-text);
             text-decoration: none;
+            font-family: "Roboto", sans-serif;
             font-size: 0.95rem;
-            font-weight: 500;
+            font-weight: 600;
             white-space: nowrap;
             transition: color 0.15s ease;
         }
@@ -164,9 +138,31 @@
             color: var(--ash-green);
         }
 
+        /*
+         * Certificate Check pill — the first <li> of the same nav flex row, so it
+         * is centred by the row's `align-items: center` and spaced by its 34px
+         * gap. font-size is restated because buttons don't inherit it.
+         */
+        .ams-site-header__cert-btn {
+            background-color: #45b035;
+            color: #ffffff;
+            border: none;
+            border-radius: 999px;
+            padding: 10px 22px;
+            font-family: "Roboto", sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background-color 0.15s ease;
+        }
+
+        .ams-site-header__cert-btn:hover {
+            background-color: #3c9a2d;
+        }
+
         .ams-site-header a:focus-visible,
-        .ams-site-header button:focus-visible,
-        .ams-site-header input:focus-visible {
+        .ams-site-header button:focus-visible {
             outline: 2px solid var(--ash-green);
             outline-offset: 2px;
         }
@@ -195,23 +191,87 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
         }
 
+        /*
+         * 95px is the full outer height of the shrunk bar (box-sizing: border-box
+         * is set for everything under .ams-site-header, so the 10px vertical
+         * padding is included). The 92px logo only needs ~86px, so this min-height
+         * binds; `align-items: center` on __inner keeps the logo and nav centred
+         * in the extra space.
+         */
         .ams-site-header.shrink-header.elementor-sticky--effects > .ams-site-header__inner {
-            min-height: 66px;
+            min-height: 95px;
             padding-top: 10px !important;
             padding-bottom: 10px !important;
         }
 
         .ams-site-header.shrink-header.elementor-sticky--effects img,
         .ams-site-header.shrink-header.elementor-sticky--effects .ams-site-header__logo {
-            width: 115px !important;
-            max-width: 115px !important;
+            width: 92px !important;
+            max-width: 92px !important;
             margin-left: 0 !important;
             position: relative !important;
             left: 0 !important;
         }
 
-        .ams-site-header.shrink-header.elementor-sticky--effects .ams-site-header__search input {
-            height: 38px;
+        /*
+         * ===== Certificate Check modal =====
+         * Lives inside <header>, which is a z-index: 9999 stacking context, so a
+         * z-index here only has to beat the header's own children — the whole
+         * modal still paints above all page content. Fixed positioning is
+         * viewport-relative regardless of the sticky ancestor.
+         */
+        .ams-cert-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+        }
+
+        .ams-cert-modal.is-open {
+            display: flex;
+        }
+
+        .ams-cert-modal__backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.65);
+        }
+
+        .ams-cert-modal__dialog {
+            position: relative;
+            width: 100%;
+            max-width: 760px;
+            max-height: 85vh;
+            overflow-y: auto;
+            background: #ffffff;
+            color: #333333;
+            border-radius: 10px;
+            padding: 40px 32px 32px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+        }
+
+        .ams-cert-modal__close {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 50%;
+            background: transparent;
+            color: #555555;
+            font-size: 26px;
+            line-height: 1;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .ams-cert-modal__close:hover {
+            background: #eeeeee;
+            color: #111111;
         }
 
         /* ===== Tablet / mobile ===== */
@@ -219,6 +279,8 @@
             .ams-site-header__inner {
                 flex-wrap: wrap;
                 row-gap: 16px;
+                /* Keep the pre-existing tablet/mobile inset; 7% is desktop-only. */
+                padding: 2%;
             }
 
             /* Row 1: logo left, hamburger right. */
@@ -231,17 +293,9 @@
                 order: 2;
             }
 
-            /* Row 2: full-width search. */
-            .ams-site-header__search {
-                order: 3;
-                flex: 1 1 100%;
-                max-width: 100%;
-                margin: 0;
-            }
-
-            /* Row 3: nav collapses; shown only when toggled open. */
+            /* Row 2: nav collapses; shown only when toggled open. */
             .ams-site-header__nav {
-                order: 4;
+                order: 3;
                 flex: 1 1 100%;
                 display: none;
             }
@@ -253,6 +307,7 @@
             .ams-site-header__nav-list {
                 flex-direction: column;
                 align-items: flex-start;
+                justify-content: flex-start;
                 gap: 4px;
             }
 
@@ -293,31 +348,124 @@
             </svg>
         </button>
 
-        {{-- Search (visual-only for now) --}}
-        <form class="ams-site-header__search" role="search" action="#" onsubmit="return false;">
-            <input
-                type="search"
-                name="q"
-                placeholder="Search Course Code, Course Name"
-                aria-label="Search Course Code, Course Name"
-            >
-            <button type="submit" aria-label="Search">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <circle cx="11" cy="11" r="7"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-            </button>
-        </form>
-
         {{-- Navigation --}}
         <nav class="ams-site-header__nav" id="ash-primary-nav" aria-label="Primary">
             <ul class="ams-site-header__nav-list">
+                {{-- First item: green pill that opens the RTODATA modal below. --}}
+                <li>
+                    <button
+                        type="button"
+                        class="ams-site-header__cert-btn"
+                        data-ams-cert-open
+                        aria-haspopup="dialog"
+                        aria-expanded="false"
+                        aria-controls="ams-cert-modal"
+                    >Certificate Check</button>
+                </li>
+
                 @foreach ($navLinks as $link)
                     <li><a class="ams-site-header__nav-link" href="{{ $link['url'] }}">{{ $link['label'] }}</a></li>
                 @endforeach
             </ul>
         </nav>
     </div>
+
+    {{--
+        Certificate Check modal. The RTODATA widget div stays mounted at all times
+        (only the modal wrapper is toggled) so the widget script initialises once
+        on page load and is never re-injected when the popup opens.
+    --}}
+    <div
+        class="ams-cert-modal"
+        id="ams-cert-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Certificate Check"
+        hidden
+    >
+        <div class="ams-cert-modal__backdrop" data-ams-cert-close></div>
+
+        <div class="ams-cert-modal__dialog">
+            <button
+                type="button"
+                class="ams-cert-modal__close"
+                data-ams-cert-close
+                aria-label="Close Certificate Check"
+            >&times;</button>
+
+            <div
+                class="rtodata-certificate-check"
+                data-api-user="02bj5CZu9GcnlmYAlWZs92Y"
+                data-api-key="313a5e9dddfbdec74a069f9854205b4d"
+                data-subdomain="amstraining">
+            </div>
+        </div>
+    </div>
+
+    {{--
+        This project has no shared layout with a single </body>, so @once is what
+        guarantees the widget script is emitted exactly once per response even if
+        the header component were ever rendered twice. `defer` keeps it off the
+        critical path and runs it after the markup above is parsed.
+    --}}
+    @once
+        <script src="https://amstraining.rtodata.com.au/api/widget/widget.js" defer></script>
+    @endonce
+
+    <script>
+        // Certificate Check modal: open/close, backdrop + Escape, scroll lock.
+        (function () {
+            var header = document.currentScript.closest('.ams-site-header');
+            if (! header) {
+                return;
+            }
+
+            var modal = header.querySelector('.ams-cert-modal');
+            var openBtn = header.querySelector('[data-ams-cert-open]');
+
+            if (! modal || ! openBtn) {
+                return;
+            }
+
+            // Remembered so closing restores whatever the page had, not a hard ''.
+            var previousOverflow = '';
+
+            var open = function () {
+                previousOverflow = document.body.style.overflow;
+                modal.hidden = false;
+                modal.classList.add('is-open');
+                document.body.style.overflow = 'hidden';
+                openBtn.setAttribute('aria-expanded', 'true');
+                var close = modal.querySelector('.ams-cert-modal__close');
+                if (close) {
+                    close.focus();
+                }
+            };
+
+            var close = function () {
+                modal.classList.remove('is-open');
+                modal.hidden = true;
+                document.body.style.overflow = previousOverflow;
+                openBtn.setAttribute('aria-expanded', 'false');
+                openBtn.focus();
+            };
+
+            openBtn.addEventListener('click', open);
+
+            // Backdrop and × both carry data-ams-cert-close.
+            modal.addEventListener('click', function (event) {
+                if (event.target.closest('[data-ams-cert-close]')) {
+                    close();
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+                    close();
+                }
+            });
+        })();
+    </script>
 
     <script>
         // Minimal, self-contained mobile nav toggle scoped to this header.

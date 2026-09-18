@@ -1,0 +1,19 @@
+<!--
+    White AMS mark used inside the About banner (three white blocks, dark
+    serif A M S, no "TRAINING" wordmark). Separate from the green
+    AMS-Training-Logo.png used by the site header.
+
+    Intrinsic size 95x56 so it renders at its natural size with no CSS sizing,
+    matching the Elementor image widget. Replaceable from Filament
+    (Homepage Settings -> Logo).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="95" height="56" viewBox="0 0 95 56" role="img" aria-label="AMS">
+    <rect x="0" y="0" width="29" height="56" fill="#FFFFFF"/>
+    <rect x="33" y="0" width="29" height="56" fill="#FFFFFF"/>
+    <rect x="66" y="0" width="29" height="56" fill="#FFFFFF"/>
+    <g fill="#2C2C2C" font-family="Georgia, 'Times New Roman', Times, serif" font-size="26" text-anchor="middle">
+        <text x="14.5" y="38">A</text>
+        <text x="47.5" y="38">M</text>
+        <text x="80.5" y="38">S</text>
+    </g>
+</svg>

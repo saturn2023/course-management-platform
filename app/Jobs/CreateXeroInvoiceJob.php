@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\IntegrationLog;
 use App\Models\Order;
+use App\Services\Xero\XeroPermanentException;
 use App\Services\Xero\XeroService;
 use App\Support\OrderCompletion;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -16,9 +17,32 @@ class CreateXeroInvoiceJob implements ShouldQueue
 
     public int $tries = 3;
 
+    /**
+     * Wait a full minute before the first retry, then five.
+     *
+     * Retrying a Xero outage immediately just spends the remaining attempts
+     * inside the same failure window. A minute also clears Xero's per-minute
+     * rate limit, which is what a 429 means.
+     */
+    public array $backoff = [60, 300];
+
     public function __construct(
         public int $orderId
     ) {
+    }
+
+    /**
+     * Deterministic per-order key sent to Xero as Idempotency-Key.
+     *
+     * This is what makes a retry safe when the first attempt actually reached
+     * Xero but the response was lost (timeout, worker killed, connection
+     * reset). Xero replays the original result for a repeated key instead of
+     * creating a second invoice, so the local xero_invoice_id guard below is
+     * no longer the only thing standing between a retry and a duplicate.
+     */
+    public function idempotencyKey(): string
+    {
+        return 'ams-order-' . $this->orderId . '-invoice';
     }
 
     public function handle(): void
@@ -67,26 +91,32 @@ class CreateXeroInvoiceJob implements ShouldQueue
 
         $xero = app(XeroService::class);
 
-        // Fail fast (before marking the order as processing) if Xero is not
-        // connected, preserving the previous behaviour.
-        $xero->activeConnection();
-
-        $order->update([
-            'xero_status' => 'processing',
-            'xero_error_message' => null,
-        ]);
-
-        $payload = $this->buildInvoicePayload($order);
-
-        IntegrationLog::create([
-            'order_id' => $order->id,
-            'service' => 'xero',
-            'action' => 'create_invoice',
-            'status' => 'processing',
-            'request_payload' => json_encode($payload),
-        ]);
+        /*
+         * Declared before the try so the failure handlers can log it even when
+         * we fail before a payload has been built.
+         */
+        $payload = [];
 
         try {
+            // Fail fast (before marking the order as processing) if Xero is
+            // not connected, preserving the previous behaviour.
+            $xero->activeConnection();
+
+            $order->update([
+                'xero_status' => 'processing',
+                'xero_error_message' => null,
+            ]);
+
+            $payload = $this->buildInvoicePayload($order);
+
+            IntegrationLog::create([
+                'order_id' => $order->id,
+                'service' => 'xero',
+                'action' => 'create_invoice',
+                'status' => 'processing',
+                'request_payload' => json_encode($payload),
+            ]);
+
             /*
             |--------------------------------------------------------------------------
             | Create the Xero invoice
@@ -95,7 +125,7 @@ class CreateXeroInvoiceJob implements ShouldQueue
             | Token refresh is handled inside XeroService::createInvoice().
             */
 
-            $responseData = $xero->createInvoice($payload);
+            $responseData = $xero->createInvoice($payload, $this->idempotencyKey());
             $invoice = $responseData['Invoices'][0] ?? null;
 
             if (! $invoice) {
@@ -147,29 +177,57 @@ class CreateXeroInvoiceJob implements ShouldQueue
              * this changes the overall order status to processed.
              */
             OrderCompletion::attemptMarkProcessed($order->id);
+        } catch (XeroPermanentException $exception) {
+            /*
+            |--------------------------------------------------------------------------
+            | Permanent failure — do not retry
+            |--------------------------------------------------------------------------
+            |
+            | Xero rejected the request itself: a validation error, or no usable
+            | connection. Re-sending the identical payload earns the identical
+            | rejection, so record it and fail the job now instead of spending
+            | two more attempts and 6 minutes reaching the same conclusion. The
+            | admin sees xero_status = failed with the reason attached.
+            */
+
+            $this->recordFailure($order, $payload, $exception);
+
+            $this->fail($exception);
         } catch (Throwable $exception) {
             /*
             |--------------------------------------------------------------------------
-            | Save Xero failure
+            | Transient failure — let the worker retry
             |--------------------------------------------------------------------------
+            |
+            | A 5xx, a 429, or a network error. Rethrowing hands the job back to
+            | the queue, which re-runs it on the $backoff schedule. The retry is
+            | safe because it replays the same Idempotency-Key.
             */
 
-            $order->update([
-                'xero_status' => 'failed',
-                'xero_error_message' => $exception->getMessage(),
-            ]);
-
-            IntegrationLog::create([
-                'order_id' => $order->id,
-                'service' => 'xero',
-                'action' => 'create_invoice',
-                'status' => 'failed',
-                'request_payload' => json_encode($payload),
-                'error_message' => $exception->getMessage(),
-            ]);
+            $this->recordFailure($order, $payload, $exception);
 
             throw $exception;
         }
+    }
+
+    /**
+     * Mark the order failed and log the reason, for either failure mode.
+     */
+    private function recordFailure(Order $order, array $payload, Throwable $exception): void
+    {
+        $order->update([
+            'xero_status' => 'failed',
+            'xero_error_message' => $exception->getMessage(),
+        ]);
+
+        IntegrationLog::create([
+            'order_id' => $order->id,
+            'service' => 'xero',
+            'action' => 'create_invoice',
+            'status' => 'failed',
+            'request_payload' => json_encode($payload),
+            'error_message' => $exception->getMessage(),
+        ]);
     }
 
     private function buildInvoicePayload(Order $order): array

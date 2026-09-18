@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Order;
+use App\Mail\Concerns\EmbedsAmsLogo;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
@@ -12,7 +13,7 @@ use Illuminate\Queue\SerializesModels;
 
 class XeroInvoiceMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use EmbedsAmsLogo, Queueable, SerializesModels;
 
     /**
      * @param  string  $pdfContents  Raw bytes of the official Xero invoice PDF.
@@ -24,6 +25,10 @@ class XeroInvoiceMail extends Mailable
 
     public function envelope(): Envelope
     {
+        // Hooked here rather than in the constructor: envelope() runs at
+        // send time, so the embed closure is never part of a queued payload.
+        $this->embedAmsLogo();
+
         return new Envelope(
             subject: 'AMS Training Invoice ' . $this->order->xero_invoice_number,
         );

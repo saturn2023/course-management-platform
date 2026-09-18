@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Enrolment;
+use App\Mail\Concerns\EmbedsAmsLogo;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -11,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
 
 class EnrolmentLinkMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use EmbedsAmsLogo, Queueable, SerializesModels;
 
     public function __construct(
         public Enrolment $enrolment
@@ -19,6 +20,10 @@ class EnrolmentLinkMail extends Mailable
 
     public function envelope(): Envelope
     {
+        // Hooked here rather than in the constructor: envelope() runs at
+        // send time, so the embed closure is never part of a queued payload.
+        $this->embedAmsLogo();
+
         return new Envelope(
             subject: 'AMS Registration Form Student to complete'
         );

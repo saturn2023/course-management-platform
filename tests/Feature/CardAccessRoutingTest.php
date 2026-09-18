@@ -3,13 +3,36 @@
 namespace Tests\Feature;
 
 use App\Models\CheckoutSession;
+use App\Models\Order;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
+/**
+ * Registration, billing and payment are one page. These tests cover which
+ * payment section each kind of visitor is served on that page, and that the
+ * submit endpoints reject a method the visitor is not entitled to — the page
+ * decides what is rendered, the endpoints decide what is accepted.
+ */
 class CardAccessRoutingTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config()->set('services.pin', [
+            'publishable_key' => 'pk_test',
+            'secret_key' => 'sk_test',
+            'base_url' => 'https://test-api.pinpayments.com/1',
+            'sandbox' => true,
+        ]);
+    }
 
     private function normalUser(): User
     {
@@ -44,41 +67,19 @@ class CardAccessRoutingTest extends TestCase
         ]);
     }
 
-    private function baseSessionAttributes(): array
+    private function checkoutSession(): CheckoutSession
     {
-        return [
+        return CheckoutSession::create([
             'course_code' => 'RIIWHS204E',
             'plan_id' => 'PLAN-1',
             'quantity' => 1,
             'unit_price' => 100.00,
             'subtotal' => 100.00,
             'expires_at' => now()->addHour(),
-        ];
-    }
-
-    /** Session that already has saved details (passes hasSavedDetails guards). */
-    private function sessionWithDetails(): CheckoutSession
-    {
-        return CheckoutSession::create($this->baseSessionAttributes() + [
-            'student_details' => [[
-                'first_name' => 'Stu', 'last_name' => 'Dent',
-                'email' => 'stu@example.test', 'phone' => '0400000000',
-            ]],
-            'billing_details' => [
-                'first_name' => 'Bill', 'last_name' => 'Payer',
-                'email' => 'bill@example.test',
-            ],
-            'details_completed_at' => now(),
         ]);
     }
 
-    /** Session without details, used to exercise the saveDetails fork. */
-    private function sessionWithoutDetails(): CheckoutSession
-    {
-        return CheckoutSession::create($this->baseSessionAttributes());
-    }
-
-    private function validDetailsPayload(): array
+    private function detailsPayload(): array
     {
         return [
             'students' => [[
@@ -92,177 +93,152 @@ class CardAccessRoutingTest extends TestCase
         ];
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | 1. Guest: card allowed, PO blocked
-    |--------------------------------------------------------------------------
-    */
-    public function test_guest_can_reach_card_and_cannot_reach_po(): void
+    private function poPayload(): array
     {
-        $session = $this->sessionWithDetails();
-
-        $this->get(route('checkout.card-payment.show', $session))
-            ->assertOk();
-
-        $this->get(route('checkout.purchase-order.show', $session))
-            ->assertForbidden();
+        return $this->detailsPayload() + [
+            'purchase_order_number' => 'PO-12345',
+            'purchase_order_document' => UploadedFile::fake()
+                ->create('po.pdf', 120, 'application/pdf'),
+        ];
     }
 
-    public function test_guest_saving_details_is_routed_to_card(): void
+    private function cardPayload(): array
     {
-        $session = $this->sessionWithoutDetails();
-
-        $this->post(route('checkout.details.save', $session), $this->validDetailsPayload())
-            ->assertRedirect(route('checkout.card-payment.show', $session));
+        return $this->detailsPayload() + ['card_token' => 'card_x'];
     }
 
     /*
     |--------------------------------------------------------------------------
-    | 2. Normal logged-in customer: card allowed, PO blocked
+    | 1. The checkout page serves the right payment section
     |--------------------------------------------------------------------------
     */
-    public function test_normal_user_can_reach_card_and_cannot_reach_po(): void
+    public function test_guest_sees_the_card_form_and_no_purchase_order_section(): void
     {
-        $session = $this->sessionWithDetails();
-        $user = $this->normalUser();
+        $response = $this->get(route('checkout.show', $this->checkoutSession()));
 
-        $this->actingAs($user)
-            ->get(route('checkout.card-payment.show', $session))
-            ->assertOk();
+        $response->assertOk();
+        $response->assertSee('id="cardPane"', false);
+        $response->assertSee('pin-card-number', false);
+        $response->assertDontSee('id="poPane"', false);
+        $response->assertDontSee('purchase_order_number', false);
+        $response->assertDontSee('id="methodTabs"', false);
+    }
 
-        $this->actingAs($user)
-            ->get(route('checkout.purchase-order.show', $session))
+    public function test_normal_customer_sees_the_card_form_and_no_purchase_order_section(): void
+    {
+        $response = $this->actingAs($this->normalUser())
+            ->get(route('checkout.show', $this->checkoutSession()));
+
+        $response->assertOk();
+        $response->assertSee('id="cardPane"', false);
+        $response->assertDontSee('id="poPane"', false);
+        $response->assertDontSee('purchase_order_number', false);
+        $response->assertDontSee('id="methodTabs"', false);
+    }
+
+    public function test_po_client_sees_the_purchase_order_form_and_no_card_section(): void
+    {
+        $response = $this->actingAs($this->poOnlyClient())
+            ->get(route('checkout.show', $this->checkoutSession()));
+
+        $response->assertOk();
+        $response->assertSee('id="poPane"', false);
+        $response->assertSee('purchase_order_number', false);
+        $response->assertSee('purchase_order_document', false);
+        $response->assertDontSee('id="cardPane"', false);
+        $response->assertDontSee('pin-card-number', false);
+        $response->assertDontSee('id="methodTabs"', false);
+    }
+
+    public function test_admin_sees_both_sections_and_the_inline_selector(): void
+    {
+        $response = $this->actingAs($this->adminUser())
+            ->get(route('checkout.show', $this->checkoutSession()));
+
+        $response->assertOk();
+        $response->assertSee('id="methodTabs"', false);
+        $response->assertSee('id="cardPane"', false);
+        $response->assertSee('id="poPane"', false);
+        $response->assertSee('Pay by card', false);
+        $response->assertSee('Purchase Order', false);
+    }
+
+    public function test_the_continue_to_checkout_step_is_gone(): void
+    {
+        // No intermediate button and no intermediate page: payment is posted
+        // from the checkout page itself.
+        $this->get(route('checkout.show', $this->checkoutSession()))
+            ->assertOk()
+            ->assertDontSee('Continue to Checkout');
+
+        $this->assertFalse(app('router')->has('checkout.payment-method.show'));
+        $this->assertFalse(app('router')->has('checkout.details.save'));
+        $this->assertFalse(app('router')->has('checkout.card-payment.show'));
+        $this->assertFalse(app('router')->has('checkout.purchase-order.show'));
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 2. The submit endpoints enforce the same rules, whatever is posted
+    |--------------------------------------------------------------------------
+    */
+    public function test_po_client_cannot_post_a_card_charge(): void
+    {
+        $this->actingAs($this->poOnlyClient())
+            ->post(route('checkout.card-payment.store', $this->checkoutSession()), $this->cardPayload())
             ->assertForbidden();
     }
 
-    public function test_normal_user_saving_details_is_routed_to_card(): void
+    public function test_guest_cannot_post_a_purchase_order(): void
     {
-        $session = $this->sessionWithoutDetails();
+        Storage::fake('local');
+
+        $this->post(route('checkout.purchase-order.store', $this->checkoutSession()), $this->poPayload())
+            ->assertForbidden();
+    }
+
+    public function test_normal_customer_cannot_post_a_purchase_order(): void
+    {
+        Storage::fake('local');
 
         $this->actingAs($this->normalUser())
-            ->post(route('checkout.details.save', $session), $this->validDetailsPayload())
-            ->assertRedirect(route('checkout.card-payment.show', $session));
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | 3. PO-only client: routed to PO, card blocked
-    |--------------------------------------------------------------------------
-    */
-    public function test_po_only_client_is_routed_to_po_and_cannot_reach_card(): void
-    {
-        $user = $this->poOnlyClient();
-
-        $forkSession = $this->sessionWithoutDetails();
-        $this->actingAs($user)
-            ->post(route('checkout.details.save', $forkSession), $this->validDetailsPayload())
-            ->assertRedirect(route('checkout.purchase-order.show', $forkSession));
-
-        $guardSession = $this->sessionWithDetails();
-        $this->actingAs($user)
-            ->get(route('checkout.card-payment.show', $guardSession))
-            ->assertForbidden();
-
-        $this->actingAs($user)
-            ->get(route('checkout.purchase-order.show', $guardSession))
-            ->assertOk();
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | 4. Admin: reaches choice page and can enter both paths
-    |--------------------------------------------------------------------------
-    */
-    public function test_admin_is_routed_to_choice_and_can_enter_both_paths(): void
-    {
-        $user = $this->adminUser();
-
-        $forkSession = $this->sessionWithoutDetails();
-        $this->actingAs($user)
-            ->post(route('checkout.details.save', $forkSession), $this->validDetailsPayload())
-            ->assertRedirect(route('checkout.payment-method.show', $forkSession));
-
-        $session = $this->sessionWithDetails();
-
-        $this->actingAs($user)
-            ->get(route('checkout.payment-method.show', $session))
-            ->assertOk();
-
-        $this->actingAs($user)
-            ->get(route('checkout.card-payment.show', $session))
-            ->assertOk();
-
-        $this->actingAs($user)
-            ->get(route('checkout.purchase-order.show', $session))
-            ->assertOk();
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | 5. URL tampering cannot bypass access rules
-    |--------------------------------------------------------------------------
-    */
-    public function test_url_changes_cannot_bypass_access_rules(): void
-    {
-        $session = $this->sessionWithDetails();
-        $poOnly = $this->poOnlyClient();
-        $normal = $this->normalUser();
-
-        // Guest check first, before any actingAs (which persists for the test):
-        // the admin-only choice page is not reachable by a guest.
-        $this->get(route('checkout.payment-method.show', $session))
-            ->assertForbidden();
-
-        // Normal user cannot reach the admin-only choice page.
-        $this->actingAs($normal)
-            ->get(route('checkout.payment-method.show', $session))
-            ->assertForbidden();
-
-        // PO-only client cannot reach the choice page...
-        $this->actingAs($poOnly)
-            ->get(route('checkout.payment-method.show', $session))
-            ->assertForbidden();
-
-        // ...nor force their way onto card checkout by entering the URL.
-        $this->actingAs($poOnly)
-            ->get(route('checkout.card-payment.show', $session))
+            ->post(route('checkout.purchase-order.store', $this->checkoutSession()), $this->poPayload())
             ->assertForbidden();
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | 6. Existing Purchase Order behaviour is intact
-    |--------------------------------------------------------------------------
-    */
-    public function test_existing_purchase_order_access_is_unchanged(): void
+    public function test_admin_may_post_either_method(): void
     {
-        $session = $this->sessionWithDetails();
+        Queue::fake();
+        Storage::fake('local');
+        Http::fake(['*' => Http::response(['response' => [
+            'token' => 'ch_ok', 'success' => true, 'amount' => 10000,
+            'currency' => 'AUD', 'status_message' => 'Success',
+            'card' => ['display_number' => 'XXXX-XXXX-XXXX-0000', 'scheme' => 'visa'],
+        ]], 201)]);
+
         $admin = $this->adminUser();
-        $poOnly = $this->poOnlyClient();
-        $normal = $this->normalUser();
 
-        // Guest check first, before any actingAs (which persists for the test).
-        $this->get(route('checkout.purchase-order.show', $session))
-            ->assertForbidden();
-
-        // Normal customer cannot.
-        $this->actingAs($normal)
-            ->get(route('checkout.purchase-order.show', $session))
-            ->assertForbidden();
-
-        // Admins and PO-only clients can view PO checkout.
+        // Each method needs its own checkout: submitting completes the session.
+        $poSession = $this->checkoutSession();
         $this->actingAs($admin)
-            ->get(route('checkout.purchase-order.show', $session))
-            ->assertOk();
+            ->post(route('checkout.purchase-order.store', $poSession), $this->poPayload())
+            ->assertRedirect(route('checkout.thank-you', $poSession));
 
-        $this->actingAs($poOnly)
-            ->get(route('checkout.purchase-order.show', $session))
-            ->assertOk();
+        $cardSession = $this->checkoutSession();
+        $this->actingAs($admin)
+            ->post(route('checkout.card-payment.store', $cardSession), $this->cardPayload())
+            ->assertRedirect(route('checkout.thank-you', $cardSession));
+
+        // Two orders, one by each method.
+        $this->assertSame(
+            ['card', 'purchase_order'],
+            Order::query()->orderBy('payment_method')->pluck('payment_method')->all()
+        );
     }
 
     /*
     |--------------------------------------------------------------------------
-    | Access-method unit coverage
+    | 3. Access-method unit coverage (unchanged rules)
     |--------------------------------------------------------------------------
     */
     public function test_user_access_methods_resolve_correctly(): void

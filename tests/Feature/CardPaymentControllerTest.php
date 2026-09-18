@@ -8,11 +8,13 @@ use App\Models\IntegrationLog;
 use App\Models\Order;
 use App\Models\PaymentAttempt;
 use App\Models\User;
+use App\Services\CheckoutOrderCreator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\URL;
+use RuntimeException;
 use Tests\TestCase;
 
 class CardPaymentControllerTest extends TestCase
@@ -61,6 +63,33 @@ class CardPaymentControllerTest extends TestCase
         ]);
     }
 
+    /**
+     * The checkout page posts the student and billing details together with
+     * the card token, so a valid charge payload now carries all three.
+     *
+     * @return array<string, mixed>
+     */
+    private function cardPayload(int $students = 1, array $overrides = []): array
+    {
+        $studentRows = [];
+        for ($i = 0; $i < $students; $i++) {
+            $studentRows[] = [
+                'first_name' => 'Stu' . $i, 'last_name' => 'Dent',
+                'email' => "stu{$i}@example.test", 'phone' => '0400000000',
+            ];
+        }
+
+        return array_merge([
+            'card_token' => 'card_x',
+            'students' => $studentRows,
+            'billing' => [
+                'first_name' => 'Bill', 'last_name' => 'Payer',
+                'email' => 'bill@example.test',
+                'address_1' => '42 Sevenoaks St', 'city' => 'Lathlain',
+            ],
+        ], $overrides);
+    }
+
     private function chargeSuccessBody(): array
     {
         return ['response' => [
@@ -93,7 +122,7 @@ class CardPaymentControllerTest extends TestCase
         Http::fake(['*' => Http::response($this->chargeSuccessBody(), 201)]);
         $session = $this->makeSession();
 
-        $response = $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x']);
+        $response = $this->post(route('checkout.card-payment.store', $session), $this->cardPayload());
 
         $response->assertRedirect(route('checkout.thank-you', $session));
 
@@ -121,11 +150,10 @@ class CardPaymentControllerTest extends TestCase
         Http::fake(['*' => Http::response($this->chargeSuccessBody(), 201)]);
         $session = $this->makeSession();
 
-        $this->post(route('checkout.card-payment.store', $session), [
-            'card_token' => 'card_x',
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload(overrides: [
             'amount' => 1, // tampered - must be ignored
             'email' => 'attacker@evil.test',
-        ]);
+        ]));
 
         Http::assertSent(function ($request) use ($session) {
             $body = $request->data();
@@ -156,7 +184,7 @@ class CardPaymentControllerTest extends TestCase
         ], 202)]);
         $session = $this->makeSession();
 
-        $response = $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x']);
+        $response = $this->post(route('checkout.card-payment.store', $session), $this->cardPayload());
 
         $response->assertRedirect($redirect);
 
@@ -182,8 +210,8 @@ class CardPaymentControllerTest extends TestCase
         ], 400)]);
         $session = $this->makeSession();
 
-        $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
-            ->assertRedirect(route('checkout.card-payment.show', $session));
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload())
+            ->assertRedirect(route('checkout.show', $session));
 
         $attempt = PaymentAttempt::firstOrFail();
         $this->assertSame(PaymentAttempt::STATE_DECLINED, $attempt->state);
@@ -201,8 +229,8 @@ class CardPaymentControllerTest extends TestCase
         ], 422)]);
         $session = $this->makeSession();
 
-        $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
-            ->assertRedirect(route('checkout.card-payment.show', $session));
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload())
+            ->assertRedirect(route('checkout.show', $session));
 
         $attempt = PaymentAttempt::firstOrFail();
         $this->assertSame(PaymentAttempt::STATE_FAILED, $attempt->state);
@@ -222,7 +250,7 @@ class CardPaymentControllerTest extends TestCase
         });
         $session = $this->makeSession();
 
-        $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload())
             ->assertRedirect(route('checkout.card-payment.received', $session));
 
         $attempt = PaymentAttempt::firstOrFail();
@@ -237,7 +265,7 @@ class CardPaymentControllerTest extends TestCase
         Http::fake(['*' => Http::response('<<not json>>', 200)]);
         $session = $this->makeSession();
 
-        $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload())
             ->assertRedirect(route('checkout.card-payment.received', $session));
 
         $attempt = PaymentAttempt::firstOrFail();
@@ -253,10 +281,17 @@ class CardPaymentControllerTest extends TestCase
     public function test_order_creation_failure_after_payment_is_reconciliation_grade(): void
     {
         Http::fake(['*' => Http::response($this->chargeSuccessBody(), 201)]);
-        // quantity 2 but only 1 student -> order creation aborts after payment.
-        $session = $this->makeSession(quantity: 2, students: 1);
+        $session = $this->makeSession();
 
-        $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
+        // Payment succeeds, then order creation blows up. The charge must
+        // survive: the customer has been debited and cannot be charged again.
+        $this->mock(
+            CheckoutOrderCreator::class,
+            fn ($mock) => $mock->shouldReceive('createPaidCardOrder')
+                ->andThrow(new RuntimeException('order creation failed'))
+        );
+
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload())
             ->assertRedirect(route('checkout.card-payment.received', $session));
 
         $attempt = PaymentAttempt::firstOrFail();
@@ -292,7 +327,7 @@ class CardPaymentControllerTest extends TestCase
             'success' => true,
         ]);
 
-        $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload())
             ->assertStatus(409);
 
         Http::assertNothingSent();
@@ -309,7 +344,7 @@ class CardPaymentControllerTest extends TestCase
             'amount_cents' => 10000,
         ]);
 
-        $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload())
             ->assertStatus(409);
 
         Http::assertNothingSent();
@@ -330,7 +365,7 @@ class CardPaymentControllerTest extends TestCase
         ]);
 
         $this->actingAs($poOnly)
-            ->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
+            ->post(route('checkout.card-payment.store', $session), $this->cardPayload())
             ->assertForbidden();
 
         Http::assertNothingSent();
@@ -342,10 +377,36 @@ class CardPaymentControllerTest extends TestCase
         $session = $this->makeSession();
         $session->update(['completed_at' => now()]);
 
-        $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload())
             ->assertStatus(409);
 
         Http::assertNothingSent();
+    }
+
+    public function test_student_count_must_match_quantity_and_no_charge_is_made(): void
+    {
+        Http::fake();
+        $session = $this->makeSession(quantity: 2, students: 2);
+
+        // One student submitted for a quantity of two: rejected before Pin is
+        // ever called, so nobody is charged for an unenrollable order.
+        $this->post(route('checkout.card-payment.store', $session), $this->cardPayload(students: 1))
+            ->assertSessionHasErrors('students');
+
+        Http::assertNothingSent();
+        $this->assertSame(0, PaymentAttempt::count());
+    }
+
+    public function test_student_and_billing_details_are_required_and_no_charge_is_made(): void
+    {
+        Http::fake();
+        $session = $this->makeSession();
+
+        $this->post(route('checkout.card-payment.store', $session), ['card_token' => 'card_x'])
+            ->assertSessionHasErrors(['students', 'billing']);
+
+        Http::assertNothingSent();
+        $this->assertSame(0, PaymentAttempt::count());
     }
 
     public function test_card_token_is_required(): void
@@ -407,7 +468,7 @@ class CardPaymentControllerTest extends TestCase
         $attempt = $this->pendingAttempt($session);
 
         $this->get($this->signedCallbackUrl($session, $attempt, 'se_token'))
-            ->assertRedirect(route('checkout.card-payment.show', $session));
+            ->assertRedirect(route('checkout.show', $session));
 
         $attempt->refresh();
         $this->assertSame(PaymentAttempt::STATE_DECLINED, $attempt->state);

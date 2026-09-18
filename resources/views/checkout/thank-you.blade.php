@@ -12,6 +12,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ ($order?->payment_method ?? null) === 'card' ? 'Payment successful' : 'Purchase order received' }} — AMS Training</title>
+    <x-layout.fonts />
     <style>
         :root {
             --ams-navy: #14223f;

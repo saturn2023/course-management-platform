@@ -51,6 +51,11 @@
             text-transform: uppercase;
         }
 
+        /*
+         * The last three are the <p> defaults already, but stated explicitly so
+         * the paragraph can't pick up a transform/style from a page-level rule.
+         * No letter-spacing by design.
+         */
         .ams-intro__body {
             margin: 0 auto;
             max-width: 1150px;
@@ -59,6 +64,9 @@
             font-size: 20px;
             font-weight: 300;
             line-height: 1.3;
+            font-style: normal;
+            text-transform: none;
+            text-decoration: none;
         }
 
         @media (max-width: 640px) {

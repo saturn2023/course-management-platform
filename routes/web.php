@@ -4,11 +4,15 @@ use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CheckoutLoadController;
 use App\Http\Controllers\PurchaseOrderCheckoutController;
+use App\Http\Controllers\XeroAuthController;
 use App\Jobs\SubmitEnrolmentToApiJob;
 use App\Models\CheckoutSession;
 use App\Models\Course;
+use App\Models\CoursePackage;
 use App\Models\Enrolment;
+use App\Models\EnrolmentStep;
 use App\Models\EnrolmentSubmission;
+use App\Models\Review;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -20,6 +24,29 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Xero OAuth connection
+|--------------------------------------------------------------------------
+|
+| Admin-only. /xero/connect starts the authorisation code flow and
+| /xero/callback exchanges the code for the token pair stored in
+| xero_connections. Both must stay behind auth: the callback is what writes
+| the credentials used for every subsequent Xero API call, and the state
+| parameter it validates lives in the authenticated session.
+|
+| The redirect URI registered in the Xero app must match xero.callback
+| exactly (see XERO_REDIRECT_URI).
+*/
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/xero/connect', [XeroAuthController::class, 'connect'])
+        ->name('xero.connect');
+
+    Route::get('/xero/callback', [XeroAuthController::class, 'callback'])
+        ->name('xero.callback');
 });
 
 /*
@@ -37,12 +64,6 @@ Route::get('/checkout/{checkoutSession:uuid}', [CheckoutController::class, 'show
 
 Route::patch('/checkout/{checkoutSession:uuid}/quantity', [CheckoutController::class, 'updateQuantity'])
     ->name('checkout.quantity.update');
-
-Route::post('/checkout/{checkoutSession:uuid}/details', [CheckoutController::class, 'saveDetails'])
-    ->name('checkout.details.save');
-
-Route::get('/checkout/{checkoutSession:uuid}/purchase-order', [PurchaseOrderCheckoutController::class, 'show'])
-    ->name('checkout.purchase-order.show');
 
 Route::post('/checkout/{checkoutSession:uuid}/purchase-order', [PurchaseOrderCheckoutController::class, 'store'])
     ->name('checkout.purchase-order.store');
@@ -353,6 +374,23 @@ Route::get('/mockups/online-refresher-courses-live', function () {
 })->name('mockups.online-refresher-courses-live');
 
 /*
+ * DB-powered standalone mockup of the Package Online Refresher Courses block.
+ * Temporary — for review of the block in isolation.
+ */
+Route::get('/mockups/package-refresher-courses-live', function () {
+    $packages = CoursePackage::query()
+        ->where('status', 'active')
+        ->where('show_on_homepage', true)
+        ->orderBy('display_order')
+        ->orderBy('id')
+        ->get();
+
+    return view('mockups.package-refresher-courses-live', [
+        'packages' => $packages,
+    ]);
+})->name('mockups.package-refresher-courses-live');
+
+/*
  * Standalone mockup of the reusable site header (<x-layout.header>).
  * Temporary — for review of the header block in isolation.
  */
@@ -365,8 +403,56 @@ Route::get('/mockups/header', function () {
  * header. Temporary — for review of the block in isolation.
  */
 Route::get('/mockups/hero-banner', function () {
-    return view('mockups.hero-banner');
+    // Same query as /mockups/online-refresher-courses-live: live records from
+    // /admin/courses, so image, code, card title, order and the two toggles all
+    // take effect on the homepage as soon as they are saved in admin.
+    $courses = Course::query()
+        ->where('status', 'active')
+        ->where('show_on_homepage', true)
+        ->orderBy('display_order')
+        ->orderBy('id')
+        ->get();
+
+    // Same live-from-admin approach for the package cards (/admin/course-packages).
+    $packages = CoursePackage::query()
+        ->where('status', 'active')
+        ->where('show_on_homepage', true)
+        ->orderBy('display_order')
+        ->orderBy('id')
+        ->get();
+
+    // Accordion rows for the enrolment section, live from /admin/enrolment-steps:
+    // active only, in the admin's order (see EnrolmentStep::scopeForHomepage).
+    $enrolmentSteps = EnrolmentStep::query()->forHomepage()->get();
+
+    // Review cards, live from /admin/reviews: active only, in the admin's
+    // order (see Review::scopeForHomepage).
+    $reviews = Review::query()->forHomepage()->get();
+
+    return view('mockups.hero-banner', [
+        'courses' => $courses,
+        'packages' => $packages,
+        'enrolmentSteps' => $enrolmentSteps,
+        'reviews' => $reviews,
+    ]);
 })->name('mockups.hero-banner');
+
+/*
+ * Public course detail page.
+ *
+ * Route model binding on the slug, scoped to active courses only, so an
+ * inactive record 404s rather than being reachable by guessing its URL. The
+ * reviews query is the same one the homepage uses, so the shared
+ * <x-home.reviews /> component gets the data it expects.
+ */
+Route::get('/courses/{course:slug}', function (Course $course) {
+    abort_unless($course->status === 'active', 404);
+
+    return view('courses.show', [
+        'course' => $course,
+        'reviews' => Review::query()->forHomepage()->get(),
+    ]);
+})->name('courses.show');
 
 /*
  * Standalone mockup of the intro text section (<x-home.intro-text>).
@@ -375,52 +461,21 @@ Route::get('/mockups/hero-banner', function () {
 Route::get('/mockups/intro-text', function () {
     return view('mockups.intro-text');
 })->name('mockups.intro-text');
+
 /*
-| Admin-only payment-method choice page. Only administrators can pay by
-| either method, so only they are offered this choice.
+ * Standalone page for rebuilding the AMS Training homepage/header design.
+ * Temporary — isolated from the live homepage; starts as a single empty
+ * Flexbox container with content to be added later.
+ */
+Route::get('/mockups/ams-homepage-rebuild', function () {
+    return view('mockups.ams-homepage-rebuild');
+})->name('mockups.ams-homepage-rebuild');
+/*
+| Payment is submitted from the checkout page itself. Both endpoints below
+| enforce their own authorization — see CardChargeRequest::authorize() and
+| SubmitPurchaseOrderRequest::authorize() — so neither can be reached by a
+| direct POST from a user who is not entitled to that method.
 */
-Route::get('/checkout/{checkoutSession:uuid}/payment-method', function (
-    CheckoutSession $checkoutSession
-) {
-    abort_if($checkoutSession->isExpired(), 410);
-    abort_if($checkoutSession->isCompleted(), 409);
-    abort_unless($checkoutSession->hasSavedDetails(), 422);
-
-    abort_unless(
-        auth()->check() && auth()->user()->isAdmin(),
-        403,
-        'Only administrators can choose a payment method.'
-    );
-
-    return view('checkout.payment-method', [
-        'session' => $checkoutSession,
-    ]);
-})->name('checkout.payment-method.show');
-
-Route::get('/checkout/{checkoutSession:uuid}/card-payment', function (
-    CheckoutSession $checkoutSession
-) {
-    abort_if($checkoutSession->isExpired(), 410);
-    abort_if($checkoutSession->isCompleted(), 409);
-    abort_unless($checkoutSession->hasSavedDetails(), 422);
-
-    /*
-     * Access guard: a logged-in PO-only client must never reach card
-     * checkout, even by entering the URL directly. Guests (no user) are
-     * allowed. The future card controller will repeat this same guard.
-     */
-    $user = auth()->user();
-    abort_if(
-        $user && ! $user->canPayByCard(),
-        403,
-        'You are not authorised to use card checkout.'
-    );
-
-    return view('checkout.card-payment', [
-        'session' => $checkoutSession,
-    ]);
-})->name('checkout.card-payment.show');
-
 Route::post('/checkout/{checkoutSession:uuid}/card-payment', [CardPaymentController::class, 'store'])
     ->name('checkout.card-payment.store');
 

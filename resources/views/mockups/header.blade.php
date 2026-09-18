@@ -10,6 +10,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mockup — Site Header</title>
+    <x-layout.fonts />
     <style>
         html, body {
             margin: 0;

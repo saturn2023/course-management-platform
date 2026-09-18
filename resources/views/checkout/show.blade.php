@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Registration — {{ $session->course_title }}</title>
+    <x-layout.fonts />
+
+    @if (auth()->user() === null || auth()->user()->canPayByCard())
+        {{-- Pin Payments official Hosted Fields library. --}}
+        <script src="https://cdn.pinpayments.com/pin.hosted_fields.v1.js"></script>
+    @endif
+
     <style>
         :root {
             --ams-navy: #1a2d5a;
@@ -195,9 +202,116 @@
             margin: 2rem 0;
         }
 
-        .continue-card { text-align: center; }
-
         .payment-card { text-align: center; }
+
+        /* ---- Inline payment section ---- */
+
+        /* Admin-only method selector. Only rendered when both panes exist. */
+        .method-tabs {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.75rem;
+            flex-wrap: wrap;
+        }
+
+        .method-tab {
+            flex: 1 1 180px;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.85rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--ams-navy);
+            background: #fff;
+            transition: border-color 0.15s ease, background 0.15s ease;
+        }
+
+        .method-tab:hover { border-color: var(--ams-navy); }
+
+        .method-tab:has(input:checked) {
+            border-color: var(--ams-green);
+            background: #f3f9ec;
+        }
+
+        .method-tab input { accent-color: var(--ams-green); }
+
+        .method-pane[hidden] { display: none; }
+
+        .pane-note {
+            color: var(--muted);
+            font-size: 0.875rem;
+            margin: 0 0 1.25rem;
+        }
+
+        .field .pane-note { margin: 0.5rem 0 0; }
+
+        /* Pin renders each card input as an iframe inside these containers. */
+        .pin-field {
+            width: 100%;
+            height: 44px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0 0.75rem;
+            background: #fff;
+            display: flex;
+            align-items: center;
+        }
+
+        .pin-row { display: flex; gap: 1rem; }
+        .pin-row > .field { flex: 1; }
+
+        .field input[type="file"] {
+            width: 100%;
+            padding: 0.5rem 0;
+            font-size: 0.95rem;
+        }
+
+        .pin-alert {
+            display: none;
+            margin-top: 1rem;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .pin-alert.error {
+            background: #fdecea;
+            border: 1px solid #f1b0a8;
+            color: var(--error);
+        }
+
+        .pin-alert.status {
+            background: var(--success-bg);
+            border: 1px solid var(--success-border);
+            color: var(--success-text);
+        }
+
+        .payment-errors {
+            background: #fdecea;
+            border: 1px solid #f1b0a8;
+            border-radius: 6px;
+            padding: 0.875rem 1.125rem;
+            margin-bottom: 1.5rem;
+            color: var(--error);
+            font-size: 0.9rem;
+        }
+
+        .payment-errors ul { margin: 0; padding-left: 1.125rem; }
+        .payment-errors li { margin: 0.125rem 0; }
+
+        .secure-note {
+            color: var(--muted);
+            font-size: 0.8rem;
+            margin: 0.75rem 0 0;
+            text-align: center;
+        }
+
+        @media (max-width: 540px) {
+            .pin-row { flex-direction: column; gap: 0; }
+        }
 
         .actions-row {
             display: flex;
@@ -365,8 +479,29 @@
         </div>
     </div>
 
-    <!-- Form: students + billing -->
-    <form id="checkoutForm" method="POST" action="{{ route('checkout.details.save', $session) }}">
+    {{--
+        Which payment methods this visitor may use. This is the SAME rule set
+        the endpoints enforce (CardChargeRequest / SubmitPurchaseOrderRequest
+        authorize()), evaluated server-side: a section the viewer is not
+        entitled to is never rendered, not merely hidden.
+
+          guest / normal customer -> card only
+          purchase-order client   -> purchase order only
+          admin                   -> both, with an inline selector
+    --}}
+    @php
+        $paymentUser = auth()->user();
+        $canPayCard  = $paymentUser === null || $paymentUser->canPayByCard();
+        $canPayPo    = $paymentUser !== null && $paymentUser->canPayByPurchaseOrder();
+        $bothMethods = $canPayCard && $canPayPo;
+
+        $cardAction = route('checkout.card-payment.store', $session);
+        $poAction   = route('checkout.purchase-order.store', $session);
+    @endphp
+
+    <!-- Form: students + billing + payment -->
+    <form id="checkoutForm" method="POST" enctype="multipart/form-data"
+          action="{{ $canPayCard ? $cardAction : $poAction }}">
         @csrf
 
         <!-- Student details (dynamic) -->
@@ -465,19 +600,122 @@
             <span id="footerSubtotal">${{ number_format((float) $session->subtotal, 2) }}</span>
         </div>
 
-        <!-- Continue button -->
-        <div class="card continue-card">
-           <button type="submit" class="btn btn-continue">
-    Continue to Checkout
-</button>
-            @if ($session->hasSavedDetails())
-                <p class="placeholder-note">
-                    Details saved {{ $session->details_completed_at->diffForHumans() }}.
-                </p>
+        <!-- Payment -->
+        <div class="card" id="paymentCard">
+            <h2>Payment</h2>
+
+            @if ($errors->any())
+                <div class="payment-errors" role="alert">
+                    <ul>
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            @if ($bothMethods)
+                {{-- Admins are the only users entitled to both methods. --}}
+                <div class="method-tabs" id="methodTabs">
+                    <label class="method-tab">
+                        <input type="radio" name="payment_method_choice" value="card" checked>
+                        <span>Pay by card</span>
+                    </label>
+                    <label class="method-tab">
+                        <input type="radio" name="payment_method_choice" value="purchase_order">
+                        <span>Purchase Order</span>
+                    </label>
+                </div>
+            @endif
+
+            @if ($canPayCard)
+                {{--
+                    Card number / expiry / CVC / name are entered into
+                    Pin-controlled iframes mounted in these containers, so raw
+                    card data never enters this page's DOM or our server. Only
+                    the publishable key is exposed; the secret key is never
+                    rendered. The opaque card_token below is the only card
+                    value posted to Laravel.
+                --}}
+                <div
+                    class="method-pane"
+                    id="cardPane"
+                    data-method="card"
+                    data-action="{{ $cardAction }}"
+                    data-publishable-key="{{ config('services.pin.publishable_key') }}"
+                    data-sandbox="{{ config('services.pin.sandbox') ? 'true' : 'false' }}"
+                >
+                    <p class="pane-note">Pay using credit card. Your payment is processed securely by Pin Payments.</p>
+
+                    <div class="field">
+                        <label>Name on card <span class="required">(Required *)</span></label>
+                        <div id="pin-card-name" class="pin-field"></div>
+                    </div>
+
+                    <div class="field">
+                        <label>Card number <span class="required">(Required *)</span></label>
+                        <div id="pin-card-number" class="pin-field"></div>
+                    </div>
+
+                    <div class="pin-row">
+                        <div class="field">
+                            <label>Expiry <span class="required">(Required *)</span></label>
+                            <div id="pin-card-expiry" class="pin-field"></div>
+                        </div>
+                        <div class="field">
+                            <label>CVC <span class="required">(Required *)</span></label>
+                            <div id="pin-card-cvc" class="pin-field"></div>
+                        </div>
+                    </div>
+
+                    <input type="hidden" name="card_token" id="pin-card-token" disabled>
+
+                    <button id="pin-pay-button" type="button" class="btn btn-continue" disabled>
+                        Preparing secure form…
+                    </button>
+
+                    <div id="pin-error" class="pin-alert error" role="alert"></div>
+                    <div id="pin-status" class="pin-alert status" role="status"></div>
+
+                    <p class="secure-note">
+                        Your card details are entered directly into Pin Payments' secure fields.
+                    </p>
+                </div>
+            @endif
+
+            @if ($canPayPo)
+                <div
+                    class="method-pane"
+                    id="poPane"
+                    data-method="purchase_order"
+                    data-action="{{ $poAction }}"
+                    @if ($bothMethods) hidden @endif
+                >
+                    <p class="pane-note">Pay by purchase order. Your invoice will be issued on your account terms.</p>
+
+                    <div class="field">
+                        <label>Purchase Order Number <span class="required">(Required *)</span></label>
+                        <input type="text" name="purchase_order_number"
+                               value="{{ old('purchase_order_number') }}"
+                               class="@error('purchase_order_number') has-error @enderror"
+                               required>
+                        @error('purchase_order_number')<div class="field-error">{{ $message }}</div>@enderror
+                    </div>
+
+                    <div class="field">
+                        <label>Purchase Order Document <span class="required">(Required *)</span></label>
+                        <input type="file" name="purchase_order_document"
+                               accept=".pdf,.jpg,.jpeg,.png"
+                               class="@error('purchase_order_document') has-error @enderror"
+                               required>
+                        <p class="pane-note">PDF, JPG or PNG, up to 25 MB.</p>
+                        @error('purchase_order_document')<div class="field-error">{{ $message }}</div>@enderror
+                    </div>
+
+                    <button type="submit" class="btn btn-continue">Submit Purchase Order</button>
+                </div>
             @endif
         </div>
-
-<!-- Payment options -->
 
     </form>
 </div>
@@ -687,5 +925,95 @@
     updateButtonStates(currentQty);
 })();
 </script>
+
+<script>
+/*
+ | Inline payment method switching.
+ |
+ | Only panes the server rendered can be selected, and the endpoints re-check
+ | entitlement on every POST, so this is presentation only — it decides which
+ | of the user's permitted forms is submitted, never whether they are allowed.
+ |
+ | Inputs in the inactive pane are disabled so they are neither submitted nor
+ | blocking HTML5 validation on a hidden required field.
+ */
+(function () {
+    const form  = document.getElementById('checkoutForm');
+    const panes = Array.from(document.querySelectorAll('.method-pane'));
+
+    if (!form || panes.length === 0) {
+        return;
+    }
+
+    function activate(method) {
+        panes.forEach(pane => {
+            const isActive = pane.dataset.method === method;
+
+            pane.hidden = !isActive;
+            pane.querySelectorAll('input, select, textarea, button').forEach(el => {
+                // The pay button stays disabled until Pin's hosted fields
+                // report ready, so its enabled state belongs to the card
+                // script alone. Disabling on deactivate is still correct.
+                if (el.id === 'pin-pay-button' && isActive) {
+                    return;
+                }
+
+                el.disabled = !isActive;
+            });
+
+            if (isActive) {
+                form.setAttribute('action', pane.dataset.action);
+            }
+        });
+
+        // The card token is populated only at tokenisation time.
+        const token = document.getElementById('pin-card-token');
+        if (token) {
+            token.disabled = true;
+        }
+
+        document.dispatchEvent(new CustomEvent('checkout:method-changed', {
+            detail: { method: method },
+        }));
+    }
+
+    document.querySelectorAll('#methodTabs input[type="radio"]').forEach(radio => {
+        radio.addEventListener('change', () => activate(radio.value));
+    });
+
+    /*
+     | A card payment is only valid once Pin has returned a token, so an Enter
+     | keypress in a text field must not post the form half-finished. Route it
+     | through the pay button instead. The card script submits the form
+     | programmatically, which does not fire this event.
+     */
+    form.addEventListener('submit', function (event) {
+        const active = panes.find(pane => !pane.hidden);
+        const token = document.getElementById('pin-card-token');
+
+        if (!active || active.dataset.method !== 'card') {
+            return;
+        }
+
+        if (!token || token.disabled || token.value === '') {
+            event.preventDefault();
+
+            const payButton = document.getElementById('pin-pay-button');
+            if (payButton && !payButton.disabled) {
+                payButton.click();
+            }
+        }
+    });
+
+    // A single-method user has exactly one pane; activating it wires the action
+    // and clears the disabled state in one place.
+    const initial = panes.find(pane => !pane.hidden) || panes[0];
+    activate(initial.dataset.method);
+})();
+</script>
+
+@if ($canPayCard)
+    <script src="{{ asset('js/checkout-card-payment.js') }}"></script>
+@endif
 </body>
 </html>

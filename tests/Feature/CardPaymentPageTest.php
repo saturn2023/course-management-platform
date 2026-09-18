@@ -55,11 +55,11 @@ class CardPaymentPageTest extends TestCase
         ]);
     }
 
-    public function test_card_page_renders_hosted_fields_for_a_guest(): void
+    public function test_checkout_page_renders_hosted_fields_for_a_guest(): void
     {
         $session = $this->sessionWithDetails();
 
-        $response = $this->get(route('checkout.card-payment.show', $session));
+        $response = $this->get(route('checkout.show', $session));
 
         $response->assertOk();
         $response->assertSee('cdn.pinpayments.com/pin.hosted_fields.v1.js', false);
@@ -76,11 +76,11 @@ class CardPaymentPageTest extends TestCase
         $response->assertDontSee('id="pin-cardholder-name"', false);
     }
 
-    public function test_card_page_exposes_only_publishable_key_and_sandbox_flag(): void
+    public function test_checkout_page_exposes_only_publishable_key_and_sandbox_flag(): void
     {
         $session = $this->sessionWithDetails();
 
-        $response = $this->get(route('checkout.card-payment.show', $session));
+        $response = $this->get(route('checkout.show', $session));
 
         $response->assertOk();
         // Publishable key + sandbox flag are present...
@@ -90,25 +90,30 @@ class CardPaymentPageTest extends TestCase
         $response->assertDontSee(self::SECRET, false);
     }
 
-    public function test_card_page_shows_the_server_side_total(): void
+    public function test_checkout_page_shows_the_server_side_total(): void
     {
         $session = $this->sessionWithDetails();
 
-        $this->get(route('checkout.card-payment.show', $session))
+        $this->get(route('checkout.show', $session))
             ->assertOk()
             ->assertSee('$100.00', false);
     }
 
-    public function test_po_only_client_still_cannot_reach_card_page(): void
+    public function test_po_only_client_is_not_served_the_card_form(): void
     {
         $session = $this->sessionWithDetails();
 
-        $this->actingAs($this->poOnlyClient())
-            ->get(route('checkout.card-payment.show', $session))
-            ->assertForbidden();
+        $response = $this->actingAs($this->poOnlyClient())
+            ->get(route('checkout.show', $session));
+
+        $response->assertOk();
+        $response->assertDontSee('id="pin-card-number"', false);
+        $response->assertDontSee('cdn.pinpayments.com/pin.hosted_fields.v1.js', false);
+        $response->assertDontSee(self::PUBLISHABLE, false);
+        $response->assertSee('purchase_order_number', false);
     }
 
-    public function test_card_page_blocked_when_details_not_saved(): void
+    public function test_checkout_page_renders_before_any_details_are_saved(): void
     {
         $session = CheckoutSession::create([
             'course_code' => 'RIIWHS204E',
@@ -119,7 +124,10 @@ class CardPaymentPageTest extends TestCase
             'expires_at' => now()->addHour(),
         ]);
 
-        $this->get(route('checkout.card-payment.show', $session))
-            ->assertStatus(422);
+        // Details are captured on this same page, so an empty session is the
+        // normal starting state rather than a blocked one.
+        $this->get(route('checkout.show', $session))
+            ->assertOk()
+            ->assertSee('id="cardPane"', false);
     }
 }

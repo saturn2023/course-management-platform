@@ -1,19 +1,24 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Concerns;
 
 use App\Models\CheckoutSession;
 use Illuminate\Contracts\Validation\Validator;
-use Illuminate\Foundation\Http\FormRequest;
 
-class SaveCheckoutDetailsRequest extends FormRequest
+/**
+ * Student and billing rules shared by every checkout submission.
+ *
+ * Registration and payment are a single page, so these details now arrive on
+ * the same POST as the card token or the purchase order. Keeping the rules in
+ * one place means both payment endpoints validate identically — neither can
+ * become the lenient way in.
+ */
+trait ValidatesCheckoutDetails
 {
-    public function authorize(): bool
-    {
-        return true;
-    }
-
-    public function rules(): array
+    /**
+     * @return array<string, array<int, string>>
+     */
+    protected function checkoutDetailRules(): array
     {
         return [
             'students'                  => ['required', 'array', 'min:1', 'max:50'],
@@ -36,11 +41,14 @@ class SaveCheckoutDetailsRequest extends FormRequest
         ];
     }
 
-    public function messages(): array
+    /**
+     * @return array<string, string>
+     */
+    protected function checkoutDetailMessages(): array
     {
         return [
-            'students.required'             => 'Student details are required.',
-            'students.array'                => 'Student details must be a list.',
+            'students.required'              => 'Student details are required.',
+            'students.array'                 => 'Student details must be a list.',
             'students.*.first_name.required' => 'Each student must have a first name.',
             'students.*.last_name.required'  => 'Each student must have a last name.',
             'students.*.email.required'      => 'Each student must have an email address.',
@@ -54,7 +62,10 @@ class SaveCheckoutDetailsRequest extends FormRequest
         ];
     }
 
-    public function attributes(): array
+    /**
+     * @return array<string, string>
+     */
+    protected function checkoutDetailAttributes(): array
     {
         return [
             'billing.first_name' => 'first name',
@@ -64,27 +75,27 @@ class SaveCheckoutDetailsRequest extends FormRequest
     }
 
     /**
-     * Cross-field rule: number of students must equal the checkout quantity.
+     * Cross-field rule: the number of students must equal the checkout
+     * quantity. The quantity is read from the session, never from the request,
+     * so a tampered payload cannot enrol more students than were paid for.
      */
-    public function withValidator(Validator $validator): void
+    protected function validateStudentCount(Validator $validator): void
     {
-        $validator->after(function (Validator $validator) {
-            $session = $this->route('checkoutSession');
+        $session = $this->route('checkoutSession');
 
-            if (! $session instanceof CheckoutSession) {
-                return;
-            }
+        if (! $session instanceof CheckoutSession) {
+            return;
+        }
 
-            $students = $this->input('students', []);
-            $expected = (int) $session->quantity;
-            $actual   = is_array($students) ? count($students) : 0;
+        $students = $this->input('students', []);
+        $expected = (int) $session->quantity;
+        $actual   = is_array($students) ? count($students) : 0;
 
-            if ($actual !== $expected) {
-                $validator->errors()->add(
-                    'students',
-                    "Please provide details for {$expected} student(s). You submitted {$actual}."
-                );
-            }
-        });
+        if ($actual !== $expected) {
+            $validator->errors()->add(
+                'students',
+                "Please provide details for {$expected} student(s). You submitted {$actual}."
+            );
+        }
     }
 }

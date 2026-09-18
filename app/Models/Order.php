@@ -31,6 +31,7 @@ class Order extends Model
     'subtotal',
     'total',
     'status',
+    'origin',
     'xero_status',
     'enrolment_status',
 
@@ -96,5 +97,50 @@ protected $casts = [
     public function paymentAttempts(): HasMany
     {
         return $this->hasMany(PaymentAttempt::class);
+    }
+
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(Refund::class);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Refundable balance
+    |--------------------------------------------------------------------------
+    |
+    | The order total is never modified by a refund. The refunded and remaining
+    | figures are always derived from the refunds relationship.
+    |
+    */
+
+    /**
+     * Sum of refunds that consume the refundable balance. Failed refunds are
+     * excluded, so a failed refund releases its amount again.
+     *
+     * @param  int|null  $excludingRefundId  Ignore one refund (used when editing it).
+     */
+    public function totalRefunded(?int $excludingRefundId = null): float
+    {
+        return round((float) $this->refunds()
+            ->affectsBalance()
+            ->when($excludingRefundId, fn ($query) => $query->whereKeyNot($excludingRefundId))
+            ->sum('amount'), 2);
+    }
+
+    /**
+     * Order total minus the refunds already recorded. Never below zero.
+     */
+    public function remainingRefundable(?int $excludingRefundId = null): float
+    {
+        return round(
+            max(0, (float) $this->total - $this->totalRefunded($excludingRefundId)),
+            2
+        );
+    }
+
+    public function isFullyRefunded(): bool
+    {
+        return $this->remainingRefundable() <= 0.0;
     }
 }
