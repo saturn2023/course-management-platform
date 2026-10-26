@@ -21,3 +21,8 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# The full WordPress functions.php dump. Kept locally as context only — it is
+# large, and it is a copy of a live site's source. reference/wp-ams2.php is the
+# extract the spec actually points at, and that one IS tracked.
+/docs/reference/wp-functions-dump.php
