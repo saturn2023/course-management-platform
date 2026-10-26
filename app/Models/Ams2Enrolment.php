@@ -1,0 +1,76 @@
+<?php
+
+namespace App\Models;
+
+use App\Enrolment\V2\Ams2Status;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+/**
+ * One Enrolment v2 row — the WordPress `ams2_enrolments` row.
+ *
+ * Status changes go through Ams2Claim, never through save(): every transition
+ * has to be an atomic claim so two processor runs cannot both advance the same
+ * row. The plain `update()` calls here only ever write non-status fields, or
+ * are reached from code that already holds the claim.
+ */
+class Ams2Enrolment extends Model
+{
+    use HasFactory;
+
+    protected $table = 'ams2_enrolments';
+
+    protected $guarded = [];
+
+    protected function casts(): array
+    {
+        return [
+            'student_data' => 'array',
+            'docs_final' => 'boolean',
+            'course_id' => 'integer',
+            'plan_id' => 'integer',
+            'order_id' => 'integer',
+            'attempts' => 'integer',
+            'verify_checks' => 'integer',
+            'reenrol_count' => 'integer',
+            'email_sent_at' => 'datetime',
+            'verify_after' => 'datetime',
+        ];
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Ams2EnrolmentDocument::class, 'enrolment_row');
+    }
+
+    public function isComplete(): bool
+    {
+        return $this->status === Ams2Status::COMPLETE;
+    }
+
+    public function needsReview(): bool
+    {
+        return $this->status === Ams2Status::NEEDS_REVIEW;
+    }
+
+    /**
+     * The learner's name, for logs and alerts.
+     */
+    public function studentName(): string
+    {
+        $data = (array) ($this->student_data ?? []);
+
+        $name = trim(($data['first_name'] ?? '').' '.($data['last_name'] ?? ''));
+
+        return $name !== '' ? $name : 'unknown';
+    }
+
+    /**
+     * Reference quoted in alerts, matching the WordPress "AMS2-{id}" format.
+     */
+    public function reference(): string
+    {
+        return 'AMS2-'.$this->id;
+    }
+}
