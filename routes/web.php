@@ -443,12 +443,9 @@ Route::get('/mockups/hero-banner', function () {
  * about_page_settings). The reviews query only runs when the admin has the
  * section switched on; it is the same query the homepage uses, so the shared
  * <x-home.reviews /> component gets the data it expects.
- *
- * rescue() mirrors the homepage components: before the migration has run the
- * page still renders (hero + defaults) instead of a 500.
  */
 Route::get('/about', function () {
-    $settings = rescue(fn () => AboutPageSetting::current(), new AboutPageSetting(), report: false);
+    $settings = AboutPageSetting::current();
 
     return view('about.show', [
         'settings' => $settings,
