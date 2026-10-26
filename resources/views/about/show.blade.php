@@ -105,7 +105,7 @@
         }
 
         /* Live page: #00000066 flat overlay. Slightly stronger here so the
-           white title clears contrast even over the bright sky. */
+           green title stays readable over the bright sky. */
         .ams-about-hero__overlay {
             position: absolute;
             inset: 0;
@@ -117,15 +117,19 @@
             z-index: 1;
         }
 
+        /* Matches the live Elementor heading: korolev-condensed 700, 79px /
+           89px, #87C65A (the live site's green, not this site's #39B54A).
+           korolev-condensed comes from the global kit in <x-layout.fonts />.
+           Line height is the same 89/79 ratio as a unitless value so it
+           scales with the smaller breakpoint sizes. */
         .ams-about-hero__title {
             margin: 0;
-            color: #FFFFFF;
-            font-family: var(--font-display);
+            color: #87C65A;
+            font-family: 'korolev-condensed', 'Segoe UI', Arial, sans-serif;
             font-size: 79px;
             font-weight: 700;
-            line-height: 1.1;
+            line-height: 1.127;
             overflow-wrap: anywhere;
-            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
         }
 
         /* ---------- SECTION HEADINGS (same treatment as the homepage intro) */
@@ -269,8 +273,14 @@
         /* ---------- RESPONSIVE (live page steps: 1200 / 1024 / 767) */
         @media (max-width: 1200px) {
             .ams-about-hero__title {
-                font-size: 64px;
+                font-size: 72px;
                 text-align: center;
+            }
+        }
+
+        @media (max-width: 880px) {
+            .ams-about-hero__title {
+                font-size: 55px;
             }
         }
 
@@ -292,10 +302,6 @@
 
             .ams-about-hero__img {
                 object-position: 67% center;
-            }
-
-            .ams-about-hero__title {
-                font-size: 44px;
             }
 
             .ams-about-content,
