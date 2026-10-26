@@ -270,32 +270,27 @@
             padding: 80px 0;
         }
 
+        /* Matches the live Elementor widgets: heading korolev-condensed 600
+           30px / 40px, list korolev 400 18px with plain disc bullets, both
+           #223A74. Same kit weights as above (drawn as 700 / 500). */
+        .ams-about-mission .ams-about__heading {
+            margin-bottom: 16px;
+            color: #223A74;
+            font-family: 'korolev-condensed', 'Segoe UI', Arial, sans-serif;
+            font-size: 30px;
+            font-weight: 600;
+            line-height: 40px;
+        }
+
         .ams-about-mission__list {
             margin: 0;
-            padding: 0;
-            list-style: none;
-            color: var(--ams-dark);
-            font-family: var(--font-body);
+            padding-left: 36px;
+            list-style: disc;
+            color: #223A74;
+            font-family: 'korolev', 'Segoe UI', Arial, sans-serif;
             font-size: 18px;
-            font-weight: 300;
-            line-height: 1.5;
-        }
-
-        .ams-about-mission__list li {
-            position: relative;
-            margin: 0 0 12px;
-            padding-left: 28px;
-        }
-
-        .ams-about-mission__list li::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0.55em;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--ams-green);
+            font-weight: 400;
+            line-height: 1.4;
         }
 
         /* ---------- RESPONSIVE (live page steps: 1200 / 1024 / 767) */
@@ -371,7 +366,7 @@
             }
 
             .ams-about-mission__list {
-                font-size: 17px;
+                padding-left: 22px;
             }
         }
     </style>
