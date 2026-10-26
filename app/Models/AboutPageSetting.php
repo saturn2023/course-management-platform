@@ -115,9 +115,9 @@ class AboutPageSetting extends Model
 
     /**
      * The default alt describes the default photo, so it only applies while
-     * that photo is in use. An uploaded photo with no alt text gets an empty
-     * alt (treated as decorative — the title is real text over it) rather than
-     * a description of a different picture.
+     * that photo is in use. The admin form requires alt text once a photo is
+     * uploaded; the empty-alt branch only covers a row saved some other way,
+     * and is better than describing a different picture.
      */
     public function heroImageAlt(): string
     {

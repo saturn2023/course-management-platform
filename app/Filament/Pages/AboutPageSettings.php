@@ -91,8 +91,9 @@ class AboutPageSettings extends Page
                         TextInput::make('hero_image_alt')
                             ->label('Image alt text')
                             ->maxLength(255)
+                            ->requiredWith('hero_image')
                             ->placeholder(AboutPageSetting::DEFAULT_HERO_IMAGE_ALT)
-                            ->helperText('Describe the photo for screen readers. Leave empty to use the default description while the default photo is shown; an uploaded photo with no alt text is treated as decorative.'),
+                            ->helperText('Describe the photo for screen readers. Required once you upload a photo. Leave empty while the default photo is shown to use the default description.'),
 
                         TextInput::make('hero_title')
                             ->label('Title')
