@@ -68,6 +68,32 @@ return [
     'connect_timeout' => env('ENROLMENT_API_CONNECT_TIMEOUT', 10),
 ],
 
+/*
+ * Enrolment v2.
+ *
+ * Credentials, base URL, subdomain and origin are shared with 'enrolment_api'
+ * above — same RTO Data account, same /api/v2 endpoint. There is deliberately
+ * no second copy of the key to drift out of step.
+ *
+ * Timeouts are NOT shared. The old flow's 20s would send slow-but-successful
+ * responses to the verify path far more often than WordPress does; these are
+ * the values ported from ams2_api().
+ *
+ * 'enabled' is the kill switch: with it off, ams2:process exits before doing
+ * anything, so no row can reach RTO Data.
+ *
+ * 'enrolment_floor' is a safety floor for the verify step. This database does
+ * not know about enrolments WordPress has already created in RTO Data, so a
+ * floor computed only from local rows could link an OLD WordPress enrolment for
+ * the same learner to a new row. With no floor set, verify refuses to run.
+ */
+'ams2' => [
+    'enabled' => env('AMS2_ENABLED', false),
+    'connect_timeout' => env('AMS2_CONNECT_TIMEOUT', 15),
+    'timeout' => env('AMS2_TIMEOUT', 90),
+    'enrolment_floor' => env('AMS2_ENROLMENT_FLOOR'),
+],
+
 'pin' => [
     'publishable_key' => env('PIN_PUBLISHABLE_KEY'),
     'secret_key' => env('PIN_SECRET_KEY'),
