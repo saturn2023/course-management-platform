@@ -170,14 +170,36 @@
         }
 
         /* ---------- ABOUT CONTENT */
+        /* Matches the live Elementor widgets: heading korolev-condensed 600,
+           52px / 63px, centred; body korolev 400, 20px, left-aligned on
+           desktop; both #223A74. The kit has no korolev-condensed 600 or
+           korolev 400, so the browser draws 700 and 500 — same as live. */
         .ams-about-content {
+            --ams-navy: #223A74;
             padding: 80px 0;
+        }
+
+        .ams-about-content .ams-about__heading {
+            margin-bottom: 20px;
+            color: var(--ams-navy);
+            font-family: 'korolev-condensed', 'Segoe UI', Arial, sans-serif;
+            font-size: 52px;
+            font-weight: 600;
+            line-height: 63px;
             text-align: center;
         }
 
         .ams-about-content .ams-about__rich {
-            max-width: 1100px;
-            margin: 0 auto;
+            color: var(--ams-navy);
+            font-family: 'korolev', 'Segoe UI', Arial, sans-serif;
+            font-size: 20px;
+            font-weight: 400;
+        }
+
+        .ams-about-content .ams-about__rich h2,
+        .ams-about-content .ams-about__rich h3 {
+            color: var(--ams-navy);
+            font-family: 'korolev-condensed', 'Segoe UI', Arial, sans-serif;
         }
 
         /* ---------- TRAINERS */
@@ -222,19 +244,25 @@
             margin: 0 auto;
         }
 
+        /* Matches the live text-editor widget: <h3><strong>NAME</strong></h3>
+           then the bio, korolev, #223A74. The theme sizes h3 at 1.75rem /
+           1.2; <strong> makes it bold. Bio is korolev 400 18px (drawn as
+           500 — the kit has no 400, same as live). */
         .ams-about-trainer__name {
-            margin: 0 0 14px;
-            color: var(--ams-dark);
-            font-family: var(--font-heading);
-            font-size: 30px;
-            font-weight: 600;
-            line-height: 1.3;
+            margin: 0 0 16px;
+            color: #223A74;
+            font-family: 'korolev', 'Segoe UI', Arial, sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1.2;
             text-transform: uppercase;
         }
 
         .ams-about-trainer .ams-about__rich {
-            color: var(--ams-dark);
+            color: #223A74;
+            font-family: 'korolev', 'Segoe UI', Arial, sans-serif;
             font-size: 18px;
+            font-weight: 400;
         }
 
         /* ---------- MISSION STATEMENT */
@@ -288,6 +316,11 @@
             .ams-about-trainer {
                 gap: 30px;
             }
+
+            /* Live page centres the About body from 1024px down. */
+            .ams-about-content .ams-about__rich {
+                text-align: center;
+            }
         }
 
         /* Trainers stack at 767px, image on top, as on the live page. */
@@ -335,14 +368,6 @@
 
             .ams-about-trainer__photo {
                 max-width: 220px;
-            }
-
-            .ams-about-trainer__name {
-                font-size: 24px;
-            }
-
-            .ams-about-trainer .ams-about__rich {
-                font-size: 17px;
             }
 
             .ams-about-mission__list {
