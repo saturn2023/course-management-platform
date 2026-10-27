@@ -2,13 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Enrolment\V2\Ams2DocumentLimit;
 use App\Enrolment\V2\Ams2Gate;
 use App\Enrolment\V2\Ams2LinkResolver;
 use App\Enrolment\V2\Ams2OldFlow;
 use App\Models\Ams2Enrolment;
+use App\Models\Enrolment;
+use App\Models\Student;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\View\View;
+use Normalizer;
 
 /**
  * The v2 enrolment form page. Port of the ams2_enrolment_form() shortcode.
@@ -29,9 +34,10 @@ class Ams2EnrolmentController extends Controller
         private Ams2LinkResolver $links,
         private Ams2OldFlow $oldFlow,
         private Ams2Gate $gate,
+        private Ams2DocumentLimit $limit,
     ) {}
 
-    public function show(Request $request): View|Response|\Illuminate\Http\RedirectResponse
+    public function show(Request $request): View|Response|RedirectResponse
     {
         $key = trim((string) $request->query('secretKey', ''));
 
@@ -91,15 +97,96 @@ class Ams2EnrolmentController extends Controller
             );
         }
 
+        // 7. The form.
+        $enrolment = Enrolment::query()->with('student')->where('secret_key', $key)->first();
+
+        if (! $enrolment) {
+            // Resolved a moment ago, so this means it went away in between.
+            return redirect()->route('enrolment.failed');
+        }
+
+        return view('enrolments.v2.form', [
+            'student' => $this->prefill($enrolment->student),
+            'languages' => config('enrolment_languages', []),
+            'countries' => config('enrolment_countries', []),
+            'limit' => $this->limit,
+            'config' => [
+                'secretKey' => $key,
+                'csrfToken' => csrf_token(),
+                'maxBytes' => $this->limit->bytes(),
+                'successUrl' => route('enrolment.completed'),
+
+                /*
+                 * Here for the browser's own use only. The server reads all
+                 * three off the link again on submit and never trusts what was
+                 * posted — "From the link, not the browser."
+                 *
+                 * Unlike the reference's shared form markup, this form renders
+                 * no course_id, plan_id or client_id inputs at all, so there is
+                 * normally nothing to strip. The submit handler still strips
+                 * them, because a crafted POST can send anything.
+                 */
+                'courseId' => $info->courseId,
+                'planId' => $info->planId,
+                'clientId' => $info->clientId,
+            ],
+        ]);
+    }
+
+    /**
+     * The learner as the form should show them.
+     *
+     * An unsaved copy, so the stored Student is untouched. The reference strips
+     * accents from the prefilled name (`clean()`: NFD, then drop the combining
+     * marks) and the field is readonly, so the stripped form is what gets
+     * submitted and what reaches RTO Data. Ported as-is: USI and AVETMISS
+     * matching is done on plain ASCII, and a name that does not match the USI
+     * registry is rejected on enrol.
+     */
+    private function prefill(?Student $student): ?Student
+    {
+        if (! $student) {
+            return null;
+        }
+
+        $copy = $student->replicate();
+        $copy->first_name = $this->stripAccents($student->first_name);
+        $copy->last_name = $this->stripAccents($student->last_name);
+
+        return $copy;
+    }
+
+    /**
+     * Drop accents, as the reference's `clean()` does: decompose to NFD and
+     * remove the combining marks.
+     *
+     * This does NOT produce ASCII, and the reference does not either. Only
+     * decomposable characters are affected — "José" becomes "Jose", but a
+     * letter that is atomic in Unicode survives intact: Ł, Đ, ø and ß all pass
+     * through, so "Müller-Łódź" becomes "Muller-Łodz" and "Søren" is unchanged.
+     * If RTO Data or the USI registry needs plain ASCII, those names still fail
+     * on enrol, and transliterating them further here would risk submitting a
+     * name that matches neither the learner's document nor the registry.
+     */
+    private function stripAccents(?string $value): string
+    {
+        $value = (string) $value;
+
         /*
-         * 7. The form itself, which is the next stage. Only an admin can reach
-         * this today: the rollout switch above defaults to on.
+         * intl is not in composer.json, so it cannot be assumed in production.
+         * Leaving a name alone beats mangling it.
          */
-        return $this->message(
-            kind: 'ok',
-            heading: 'Enrolment v2',
-            message: 'This link belongs to the v2 enrolment flow. The form itself is not built yet.',
-        );
+        if ($value === '' || ! class_exists(Normalizer::class)) {
+            return $value;
+        }
+
+        $decomposed = Normalizer::normalize($value, Normalizer::FORM_D);
+
+        if (! is_string($decomposed)) {
+            return $value;
+        }
+
+        return preg_replace('/\p{Mn}/u', '', $decomposed) ?? $value;
     }
 
     private function message(

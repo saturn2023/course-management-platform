@@ -106,6 +106,15 @@ return [
     'admin_only' => env('AMS2_ADMIN_ONLY', true),
 
     /*
+     * Ceiling for a single uploaded document, ported from AMS_DOC_MAX_BYTES.
+     *
+     * A ceiling, not the effective limit: Ams2DocumentLimit lowers it to
+     * whatever upload_max_filesize and post_max_size actually allow, because a
+     * file above those is discarded by PHP before any of this code runs.
+     */
+    'max_document_bytes' => env('AMS2_MAX_DOCUMENT_BYTES', 10 * 1024 * 1024),
+
+    /*
      * The confirmation email's From address.
      *
      * Deliberately NOT MAIL_FROM_ADDRESS: that is whatever the environment
