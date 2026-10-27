@@ -113,6 +113,79 @@ third cause does not exist here today.
 > depends on the delay. Worth knowing before reading a slow first enrol as a
 > stuck processor.
 
+## The form (stage 6)
+
+Three requests, not one multipart POST:
+
+```
+POST /enrolment-v2/submit      fields only, returns the row id
+POST /enrolment-v2/documents   one file per request, up to 4 attempts each
+POST /enrolment-v2/finalise    sets docs_final
+GET  /enrolment-v2/token       a fresh CSRF token
+```
+
+That shape is the reference's and it is load-bearing: one flaky upload can be
+retried without resubmitting the enrolment, and no single request has to carry
+every document at once — which matters because PHP discards an oversized
+request before any application code runs.
+
+**Required fields are only `first_name`, `last_name`, `date_of_birth` and
+`email`.** Everything else on the form is optional, and failure is one generic
+message rather than per-field errors.
+
+**A resubmit of a key that already has a row is a SUCCESS** returning the same
+id, checked *before* the required-field checks. That is what makes the script's
+"You will not be enrolled twice" true, and it means a bare retry after a dropped
+connection does not read as a validation failure.
+
+**`course_id`, `plan_id` and `client_id` are read off the link every time** and
+stripped from anything posted. The v2 form renders no such inputs at all, unlike
+the reference's shared markup, but a crafted POST can send anything.
+
+**`docs_expected` records what the BROWSER says it is holding**, not what has
+arrived, and `docs_final` stays false until the browser confirms it has
+finished. With no documents expected the row is final immediately and the
+documents step never waits.
+
+**The document type is decided from the file's contents.** A real JPEG saved as
+`.pdf` is accepted and stored as `.jpg`; a zip named `.pdf` is refused.
+`original_name` keeps whatever the learner called it, because RTO Data must
+receive that.
+
+### The upload limit is read at runtime
+
+> **Deliberate divergence.** The reference offers `AMS_DOC_MAX_BYTES` (10MB)
+> unconditionally, which is safe on its own host. Hosting here is cPanel, where
+> `upload_max_filesize` is routinely 2M–8M, and a file above it is discarded by
+> PHP before any code runs — the request arrives with an empty `$_FILES` and no
+> useful error. So the form offers the **smallest** of the configured ceiling,
+> `upload_max_filesize` and `post_max_size`, and the label rounds **down** so it
+> never names a size the server would reject.
+
+### The prefilled name has its accents stripped, but is not ASCII
+
+> Ported from the reference's `clean()`: decompose to NFD, drop the combining
+> marks. This is **not** a conversion to ASCII, in the reference either — only
+> decomposable characters change. `José` → `Jose`, but `Ł`, `Đ`, `ø` and `ß` pass
+> straight through, so `Müller-Łódź` → `Muller-Łodz` and `Søren` is unchanged.
+> If RTO Data or the USI registry needs plain ASCII, those names still fail on
+> enrol. Transliterating further was considered and rejected: it risks
+> submitting a name matching neither the learner's ID nor the registry.
+
+### Departures in the browser script
+
+> - WordPress nonces become Laravel's CSRF token, refreshed from
+>   `/enrolment-v2/token` and retried once on the `nonce` code — the same dance.
+>   A stale token is mapped to that code by matching the **419**, not
+>   `TokenMismatchException`: the handler's `prepareException()` has already
+>   converted it by the time render callbacks run.
+> - `finalise` is sent with `fetch(keepalive)` rather than `sendBeacon`, so the
+>   CSRF token still travels as the page unloads. The reference's equivalent
+>   skips its nonce check for exactly this reason.
+> - The reference beacons client-side diagnostics to an `ams_log_client` action.
+>   There is no such endpoint here, so those calls are dropped rather than
+>   pointed at something that would 404 on every file a learner rejects.
+
 ## Status machine
 
 These are the exact statuses `reference/wp-ams2.php` uses. Every `-ing` status is a
@@ -143,11 +216,13 @@ Plus `needs_review`, which nothing transitions out of except the admin Resume ac
    **Readiness gate.** The step waits until `docs_final` is set, or the row is 15
    minutes old, whichever comes first — so it never sends a half-uploaded set.
 
-   > **Stage 6 (form) must set `docs_final = 1` when the browser finishes
-   > uploading.** Without it every row with documents sits for the full 15
-   > minutes before this step will touch it. Nothing fails; enrolments are just
-   > silently 15 minutes slower, which is easy to misread as the processor
-   > being broken.
+   > **Done in stage 6.** `POST /enrolment-v2/finalise` sets `docs_final` when
+   > the browser finishes uploading. Without it every row with documents would
+   > sit for the full 15 minutes before this step touched it — nothing fails,
+   > enrolments are just silently slower, which is easy to misread as the
+   > processor being broken. The gate stays as the backstop for a learner whose
+   > browser never reports in, since `finalise` is sent as the page unloads and
+   > may not arrive.
 
    **A document that cannot be sent does not stop the enrolment.** The learner was
    never shown an error and is already in RTO Data, so the row advances to
