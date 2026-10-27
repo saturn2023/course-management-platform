@@ -20,6 +20,36 @@ context only. Never load it.
 - Any course/plan **without** a published template stays on the existing
   `EnrolmentApiService::submit()` old flow, unchanged.
 
+### The rollout switch
+
+`AMS2_ADMIN_ONLY` gates who reaches v2: with it on, only a logged-in admin does,
+and every student falls through to the old flow.
+
+> **Deliberate divergence — the default is inverted.** In the reference
+> `AMS2_ADMIN_ONLY` is **false**, so real students are already on v2 in
+> production. Here it defaults to **true** until it is switched off deliberately.
+> The reference's value is not a porting error to correct.
+
+> **Deliberate divergence — the switch also gates the POST endpoints.** The
+> reference checks it in `ams2_route_enrol_link()` and `ams2_enrolment_form()`
+> only, not in `ams2_submit()`, `ams2_upload()` or `ams2_finalise()`. Anyone
+> holding a valid secret key could therefore POST a v2 enrolment while the
+> switch was on. All entry points are gated here.
+
+Neither the switch nor the template check ever blocks a learner who **already
+has a v2 row**: they are sent back to v2 before either question is asked,
+because handing them to the old form would enrol them a second time. The
+reference is explicit about this ordering and it must be preserved.
+
+### Scheduling latency
+
+> **Deliberate divergence.** `ams2_schedule()` is not ported (decided at stage
+> 2), so a newly submitted row waits for the per-minute scheduled run rather
+> than the reference's `time() + 5`. A row therefore starts up to ~60 seconds
+> later than it would in WordPress. No behaviour differs; nothing in the flow
+> depends on the delay. Worth knowing before reading a slow first enrol as a
+> stuck processor.
+
 ## Status machine
 
 These are the exact statuses `reference/wp-ams2.php` uses. Every `-ing` status is a

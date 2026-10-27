@@ -94,6 +94,18 @@ return [
     'enrolment_floor' => env('AMS2_ENROLMENT_FLOOR'),
 
     /*
+     * Staged rollout: with this on, only a logged-in admin reaches the v2
+     * enrolment form. Everyone else falls through to the old flow, which stays
+     * the live path for every course until this is switched off.
+     *
+     * Defaults to ON, unlike the reference, where AMS2_ADMIN_ONLY is false and
+     * real students are already on v2. Nothing here is a security boundary: a
+     * course is on v2 only once it has a published Enrolment Email template,
+     * and this switch decides who sees that.
+     */
+    'admin_only' => env('AMS2_ADMIN_ONLY', true),
+
+    /*
      * The confirmation email's From address.
      *
      * Deliberately NOT MAIL_FROM_ADDRESS: that is whatever the environment

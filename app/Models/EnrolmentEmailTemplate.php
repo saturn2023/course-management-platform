@@ -100,6 +100,15 @@ class EnrolmentEmailTemplate extends Model
                 ]);
             }
         });
+
+        /*
+         * The gate cache below is memoised for the life of the request, so
+         * publishing or deleting a template has to drop it. Without this,
+         * whoever just published one is told in the same request that the
+         * course is still not on v2.
+         */
+        static::saved(fn () => static::flushGateCache());
+        static::deleted(fn () => static::flushGateCache());
     }
 
     /*
