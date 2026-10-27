@@ -17,6 +17,16 @@ context only. Never load it.
 - Before creating a v2 enrolment, block it if the **secret key** already exists in the
   old flow (`ams2_in_old_flow()`). Check in route, form render and submit.
 - Secret keys/links without a valid OrderID are invalid. Never treat them as a pass.
+  Three separate causes collapse into one `invalid` state: a malformed key, a key with
+  no order, and a key whose **order no longer resolves**. A non-zero order id is not
+  enough on its own.
+- `expired` is **not** `invalid`. An expired link is genuine, so the reference still
+  routes it to v2 and lets the form show the expiry message. Collapsing the two would
+  hand an expired link back to the old flow and show the student a wronger message.
+- `course_id`, `plan_id` and `client_id` come from the link's own query string
+  (`code`, `plan`, `company`), never from the browser — the reference is explicit
+  ("From the link, not the browser"), because a learner can edit anything the form
+  posts.
 - Any course/plan **without** a published template stays on the existing
   `EnrolmentApiService::submit()` old flow, unchanged.
 
@@ -40,6 +50,23 @@ Neither the switch nor the template check ever blocks a learner who **already
 has a v2 row**: they are sent back to v2 before either question is asked,
 because handing them to the old form would enrol them a second time. The
 reference is explicit about this ordering and it must be preserved.
+
+### Link expiry
+
+> **Deliberate divergence — both rules apply.** The reference expires a link on
+> the **order's** age alone: created + 125 days. Laravel already issues links
+> with their own `enrolment_token_expires_at` (30 days), which the old flow
+> honours today, so a link is expired when **either** has passed. Porting only
+> the reference's rule would quietly stretch every existing link from 30 days
+> to 125.
+
+### `client_id` is always empty
+
+> `CreateEnrolmentJob` builds `secret_base_url` with `code` and `plan` only — no
+> `company` — so the `client_id` the reference reads from the link resolves to
+> `''` and reaches the enrol payload empty. The parse is ported faithfully and
+> will pick the value up if links ever carry it. **Open question with AMS:**
+> whether purchase-order enrolments should link to an employer in RTO Data.
 
 ### Scheduling latency
 
