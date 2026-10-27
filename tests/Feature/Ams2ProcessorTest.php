@@ -176,35 +176,36 @@ class Ams2ProcessorTest extends TestCase
 
     public function test_a_run_advances_a_row_as_far_as_the_implemented_steps_go(): void
     {
-        // Nothing to upload and uploading is finished, so the documents step
-        // runs straight through. The update step is not built, so it stops there.
+        // Nothing to upload and uploading is finished, so documents and the
+        // email update both run through. The confirmation email is not built,
+        // so it stops there.
         $row = $this->row(['docs_final' => true]);
 
         $this->processor()->run();
 
-        $this->assertSame(Ams2Status::DOCUMENTS_DONE, $row->fresh()->status);
+        $this->assertSame(Ams2Status::UPDATED, $row->fresh()->status);
     }
 
     public function test_an_unimplemented_step_stops_the_row_rather_than_advancing_it(): void
     {
-        $row = $this->row(['status' => Ams2Status::DOCUMENTS_DONE]);
+        $row = $this->row(['status' => Ams2Status::UPDATED]);
 
         $this->processor()->run();
 
         /*
          * A stub that advanced would mark work as done that never happened:
-         * the row would reach `complete` with the email never corrected and no
-         * confirmation delivered, and nothing would ever come back for it.
-         * Stopping keeps it visible and resumable.
+         * the row would reach `complete` with no confirmation delivered, and
+         * nothing would ever come back for it. Stopping keeps it visible and
+         * resumable.
          */
-        $this->assertSame(Ams2Status::DOCUMENTS_DONE, $row->fresh()->status);
+        $this->assertSame(Ams2Status::UPDATED, $row->fresh()->status);
     }
 
     public function test_an_unimplemented_step_is_logged(): void
     {
         Log::spy();
 
-        $this->row(['status' => Ams2Status::DOCUMENTS_DONE]);
+        $this->row(['status' => Ams2Status::UPDATED]);
 
         $this->processor()->run();
 
@@ -217,7 +218,7 @@ class Ams2ProcessorTest extends TestCase
     {
         $rows = [];
 
-        foreach ([Ams2Status::DOCUMENTS_DONE, Ams2Status::UPDATED] as $status) {
+        foreach ([Ams2Status::UPDATED] as $status) {
             $rows[$status] = $this->row(['status' => $status]);
         }
 
@@ -269,7 +270,7 @@ class Ams2ProcessorTest extends TestCase
 
         $this->assertSame(
             Ams2Processor::BATCH_LIMIT,
-            Ams2Enrolment::where('status', Ams2Status::DOCUMENTS_DONE)->count(),
+            Ams2Enrolment::where('status', Ams2Status::UPDATED)->count(),
         );
         $this->assertSame(3, Ams2Enrolment::where('status', Ams2Status::RECEIVED)->count());
     }
