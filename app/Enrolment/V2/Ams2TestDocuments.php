@@ -6,6 +6,7 @@ use App\Models\Ams2Enrolment;
 use App\Models\Ams2EnrolmentDocument;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * Writes two fixture documents against an enrolment row, so the documents step
@@ -26,20 +27,19 @@ class Ams2TestDocuments
     public const DIRECTORY = 'ams2-documents';
 
     /**
-     * Smallest valid files that still carry real magic bytes, so MIME
-     * detection sees application/pdf and image/jpeg rather than text/plain.
+     * Real files, committed to the repo rather than built inline.
+     *
+     * The first attempt used a hand-written 193-byte PDF with no xref table —
+     * structurally invalid, so RTO Data could reasonably reject it and the
+     * fixture itself would be a candidate cause of any failure. These are a
+     * conforming one-page PDF and a photo-sized JPEG, so file content can be
+     * ruled out when a live upload misbehaves.
      */
-    private const PDF = "%PDF-1.4\n"
-        ."1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
-        ."2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
-        ."3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\n"
-        ."trailer<</Root 1 0 R>>\n"
-        ."%%EOF\n";
+    public const FIXTURE_DIRECTORY = 'resources/fixtures/ams2';
 
-    /** A 1x1 baseline JPEG. */
-    private const JPEG_BASE64 = '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRof'
-        .'Hh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAAB'
-        .'AAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+    public const ID_FIXTURE = 'test-id.jpg';
+
+    public const TRANSCRIPT_FIXTURE = 'test-vet-transcript.pdf';
 
     /**
      * Attach an ID document and a VET transcript to a row.
@@ -55,14 +55,14 @@ class Ams2TestDocuments
                 $row,
                 Ams2DocumentTypes::ID_DOCUMENT,
                 $name.' ID.jpg',
-                base64_decode(self::JPEG_BASE64),
+                $this->fixture(self::ID_FIXTURE),
                 'image/jpeg',
             ),
             $this->write(
                 $row,
                 Ams2DocumentTypes::VET_TRANSCRIPT,
                 $name.' VET Transcript.pdf',
-                self::PDF,
+                $this->fixture(self::TRANSCRIPT_FIXTURE),
                 'application/pdf',
             ),
         ];
@@ -91,6 +91,17 @@ class Ams2TestDocuments
             'size_bytes' => strlen($contents),
             'status' => Ams2EnrolmentDocument::STATUS_PENDING,
         ]);
+    }
+
+    private function fixture(string $file): string
+    {
+        $path = base_path(self::FIXTURE_DIRECTORY.'/'.$file);
+
+        if (! is_file($path)) {
+            throw new RuntimeException('Missing Enrolment v2 test fixture: '.$path);
+        }
+
+        return (string) file_get_contents($path);
     }
 
     private function learnerName(Ams2Enrolment $row): string
