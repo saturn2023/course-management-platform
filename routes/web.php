@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Ams2EnrolmentController;
+use App\Http\Controllers\Ams2SubmissionController;
 use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CheckoutLoadController;
@@ -379,6 +380,29 @@ Route::get('/enrolment-not-successful', function () {
 
 Route::get('/enrolment-v2', [Ams2EnrolmentController::class, 'show'])
     ->name('enrol.v2.show');
+
+/*
+ * The three requests the form makes, plus a token refresh.
+ *
+ * The enrolment is saved first and each document is uploaded afterwards in its
+ * own request, so one flaky upload can be retried without resubmitting the
+ * form, and no single request has to carry every document at once.
+ *
+ * All four stay in the `web` group: they need the session for CSRF, and the
+ * rollout switch reads the logged-in user. Authorisation itself is the secret
+ * key in the body, which every one of them re-checks.
+ */
+Route::post('/enrolment-v2/submit', [Ams2SubmissionController::class, 'submit'])
+    ->name('enrol.v2.submit');
+
+Route::post('/enrolment-v2/documents', [Ams2SubmissionController::class, 'documents'])
+    ->name('enrol.v2.documents');
+
+Route::post('/enrolment-v2/finalise', [Ams2SubmissionController::class, 'finalise'])
+    ->name('enrol.v2.finalise');
+
+Route::get('/enrolment-v2/token', [Ams2SubmissionController::class, 'token'])
+    ->name('enrol.v2.token');
 
 /*
 |--------------------------------------------------------------------------

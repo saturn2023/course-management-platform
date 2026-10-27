@@ -114,7 +114,17 @@ class Ams2EnrolmentController extends Controller
                 'secretKey' => $key,
                 'csrfToken' => csrf_token(),
                 'maxBytes' => $this->limit->bytes(),
+
+                // The same string the form text shows, so the "maximum size
+                // is X" message cannot contradict the label beside the field.
+                'maxBytesLabel' => $this->limit->label(),
+
                 'successUrl' => route('enrolment.completed'),
+
+                'submitUrl' => route('enrol.v2.submit'),
+                'uploadUrl' => route('enrol.v2.documents'),
+                'finaliseUrl' => route('enrol.v2.finalise'),
+                'tokenUrl' => route('enrol.v2.token'),
 
                 /*
                  * Here for the browser's own use only. The server reads all
