@@ -6,6 +6,7 @@ use App\Http\Controllers\CheckoutLoadController;
 use App\Http\Controllers\PurchaseOrderCheckoutController;
 use App\Http\Controllers\XeroAuthController;
 use App\Jobs\SubmitEnrolmentToApiJob;
+use App\Models\AboutPageSetting;
 use App\Models\CheckoutSession;
 use App\Models\Course;
 use App\Models\CoursePackage;
@@ -436,6 +437,21 @@ Route::get('/mockups/hero-banner', function () {
         'reviews' => $reviews,
     ]);
 })->name('mockups.hero-banner');
+
+/*
+ * Public About page, edited at Admin → About Page (one-row
+ * about_page_settings). The reviews query only runs when the admin has the
+ * section switched on; it is the same query the homepage uses, so the shared
+ * <x-home.reviews /> component gets the data it expects.
+ */
+Route::get('/about', function () {
+    $settings = AboutPageSetting::current();
+
+    return view('about.show', [
+        'settings' => $settings,
+        'reviews' => $settings->showReviews() ? Review::query()->forHomepage()->get() : collect(),
+    ]);
+})->name('about');
 
 /*
  * Public course detail page.
