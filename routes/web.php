@@ -4,6 +4,7 @@ use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CheckoutLoadController;
 use App\Http\Controllers\PurchaseOrderCheckoutController;
+use App\Http\Controllers\StudentDocumentController;
 use App\Http\Controllers\XeroAuthController;
 use App\Jobs\SubmitEnrolmentToApiJob;
 use App\Models\CheckoutSession;
@@ -13,6 +14,8 @@ use App\Models\Enrolment;
 use App\Models\EnrolmentStep;
 use App\Models\EnrolmentSubmission;
 use App\Models\Review;
+use App\Models\StudentDocument;
+use App\Models\StudentInformationPageSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -436,6 +439,37 @@ Route::get('/mockups/hero-banner', function () {
         'reviews' => $reviews,
     ]);
 })->name('mockups.hero-banner');
+
+/*
+ * Public Student Information page, edited at Admin → Student Information
+ * Page (one-row student_information_page_settings) with the documents list
+ * from Admin → Student Documents. Items with neither a file nor a link are
+ * left off rather than rendered as dead links.
+ */
+Route::get('/student-information', function () {
+    return view('student-information.show', [
+        'settings' => StudentInformationPageSetting::current(),
+        'documents' => StudentDocument::query()
+            ->active()
+            ->get()
+            ->filter(fn (StudentDocument $document) => $document->isFile() || $document->isLink())
+            ->values(),
+    ]);
+})->name('student-information');
+
+/*
+ * Student document downloads, keyed on the slug so the URL stays the same when
+ * the file is replaced. Files are on the private `local` disk.
+ */
+Route::get('/student-information/documents/{studentDocument:slug}', [StudentDocumentController::class, 'download'])
+    ->name('student-documents.download');
+
+/*
+ * Old nav URL (the header and footer pointed here before the page existed).
+ * TODO: change to Route::permanentRedirect once /student-information is live
+ * and checked — a 302 for now so browsers don't cache a 301 while testing.
+ */
+Route::redirect('/student-info', '/student-information');
 
 /*
  * Public course detail page.

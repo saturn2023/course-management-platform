@@ -23,8 +23,8 @@
     /*
      * Same destinations as the header's nav, in the reference footer's order.
      *
-     * Note these are the rebuild's placeholder URLs: only "/" is routed so far
-     * — /about, /student-info and /contact are what the header already points
+     * Note these are the rebuild's placeholder URLs: some are not routed yet
+     * — /about, /student-information and /contact are what the header points
      * at, and /certificate-check is where the header's modal button would go if
      * it were a link. Reusing them keeps header and footer consistent; routing
      * them is a separate job and no new route was invented here.
@@ -33,7 +33,7 @@
         ['label' => 'Home', 'url' => '/'],
         ['label' => 'About', 'url' => '/about'],
         ['label' => 'Certificate Check', 'url' => '/certificate-check'],
-        ['label' => 'Student Info', 'url' => '/student-info'],
+        ['label' => 'Student Info', 'url' => '/student-information'],
         ['label' => 'Contact', 'url' => '/contact'],
     ];
 @endphp
