@@ -12,7 +12,15 @@
             background: #f4f4f4;
             color: #223A74;
             margin: 0;
-            padding: 2rem;
+        }
+
+        /*
+         * The page gutter lives here, not on <body>: the site header is
+         * full-bleed and sticky, so body padding would inset it and offset
+         * where it sticks. Same reasoning as checkout/show.blade.php.
+         */
+        .page {
+            padding: 2rem 1rem;
         }
 
         .card {
@@ -69,6 +77,9 @@
     </style>
 </head>
 <body>
+<x-layout.header />
+
+<div class="page">
     <div class="card">
         <div class="icon">!</div>
 
@@ -78,5 +89,6 @@
 
         <a class="button" href="{{ url('/courses') }}">Return to courses</a>
     </div>
+</div>
 </body>
 </html>
