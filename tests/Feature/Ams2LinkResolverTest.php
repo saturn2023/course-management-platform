@@ -293,7 +293,7 @@ class Ams2LinkResolverTest extends TestCase
     |--------------------------------------------------------------------------
     */
 
-    private function submit(Enrolment $enrolment): void
+    private function submit(Enrolment $enrolment, string $apiStatus = 'pending'): void
     {
         EnrolmentSubmission::create([
             'enrolment_id' => $enrolment->id,
@@ -301,7 +301,7 @@ class Ams2LinkResolverTest extends TestCase
             'student_id' => $enrolment->student_id,
             'form_data' => ['first_name' => 'Jane'],
             'submitted_at' => now(),
-            'api_status' => 'pending',
+            'api_status' => $apiStatus,
         ]);
     }
 
@@ -340,5 +340,82 @@ class Ams2LinkResolverTest extends TestCase
         // A row with no key must not be matched by a blank lookup.
         $this->assertFalse($this->oldFlow()->has(''));
         $this->assertFalse($this->oldFlow()->has(null));
+    }
+
+    /**
+     * A submission that never reached RTO Data still counts.
+     *
+     * The learner's answers are saved either way, and a retry can still push
+     * them to RTO Data later — so sending this learner to v2 could enrol them
+     * twice, once from each flow.
+     */
+    public function test_a_submission_that_never_reached_the_api_still_counts(): void
+    {
+        foreach (['pending', 'failed', 'processing', ''] as $index => $apiStatus) {
+            $key = str_repeat((string) ($index + 1), 32);
+
+            $enrolment = $this->enrolment(
+                ['secret_key' => $key],
+                [],
+                'learner'.$index.'@example.test',
+            );
+            $this->submit($enrolment, $apiStatus);
+
+            $this->assertTrue(
+                $this->oldFlow()->has($key),
+                'api_status: '.($apiStatus === '' ? '(empty)' : $apiStatus),
+            );
+        }
+    }
+
+    /**
+     * A link marked used but with no submission row.
+     *
+     * Only the v1 POST success path writes enrolment_completed_at, and it
+     * writes the submission first, so a crash between the two leaves a
+     * submission with no completion — not this. Getting here takes the
+     * submission being deleted directly: a manual edit, a partial restore, or
+     * a retention purge like the reference's ams_purge_personal_data_run(),
+     * which is not ported yet.
+     *
+     * It must still count. Both v1 routes refuse a completed enrolment, and
+     * nothing in the v2 path checks for a spent link — the reference never
+     * needed that check, because there the used marker and the old-flow marker
+     * are the same row. Ignoring it would let a used link come back to life
+     * through v2.
+     */
+    public function test_a_link_marked_used_with_no_submission_row_still_counts(): void
+    {
+        $this->enrolment(['enrolment_completed_at' => now()->subDay()]);
+
+        $this->assertSame(0, EnrolmentSubmission::query()->count());
+        $this->assertTrue($this->oldFlow()->has(self::KEY));
+    }
+
+    /**
+     * A v1 attempt that died before writing anything.
+     *
+     * The form_data encoding bug did exactly this: EnrolmentSubmission::create()
+     * threw, so the enrolment update that follows it never ran. Neither marker
+     * is set, nothing was submitted, and the link is still unused — so the
+     * learner belongs on v2 if their course is on v2.
+     */
+    public function test_an_attempt_that_wrote_nothing_does_not_count(): void
+    {
+        $this->enrolment(['status' => 'link_created', 'enrolment_completed_at' => null]);
+
+        $this->assertFalse($this->oldFlow()->has(self::KEY));
+    }
+
+    public function test_a_status_of_completed_alone_does_not_count(): void
+    {
+        /*
+         * status is a free-text field on the admin form, so it is the weaker
+         * signal of the two. enrolment_completed_at is what both v1 routes
+         * actually test, and what is read here.
+         */
+        $this->enrolment(['status' => 'completed', 'enrolment_completed_at' => null]);
+
+        $this->assertFalse($this->oldFlow()->has(self::KEY));
     }
 }

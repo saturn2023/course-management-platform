@@ -51,6 +51,27 @@ has a v2 row**: they are sent back to v2 before either question is asked,
 because handing them to the old form would enrol them a second time. The
 reference is explicit about this ordering and it must be preserved.
 
+### What counts as "already in the old flow"
+
+In the reference, *"this link has been used"* and *"this link is in the old
+flow"* are the **same fact** — one `enrolment_requests` row records both.
+Laravel splits them across two columns, so **either** means the link is spent:
+
+| State | Counts? | Why |
+|---|---|---|
+| `enrolment_submissions` row, `api_status` pending or failed | **yes** | The answers are saved and a retry can still reach RTO Data, so v2 could enrol the learner a second time. |
+| `enrolment_completed_at` set, no submission row | **yes** | Both v1 routes refuse a completed link, and nothing in the v2 path checks for a spent one. Reading only the submission row would let a used link come back to life through v2. |
+| Submit died before writing anything | no | Nothing was submitted; the link is still unused. The `form_data` encoding bug did exactly this — the submission insert threw, so the completion write never ran. |
+| `status` = `'completed'` but `enrolment_completed_at` null | no | `status` is a free-text field on the admin form. `enrolment_completed_at` is what both v1 routes actually test. |
+
+Neither marker is ever written by v2, which keeps its state entirely in
+`ams2_enrolments`, so this can never lock v2 out of its own rows.
+
+A completed link with no submission row takes a direct delete to produce — a
+manual edit, a partial restore, or a retention purge. The reference has
+`ams_purge_personal_data_run()`; **Laravel has no equivalent yet**, so that
+third cause does not exist here today.
+
 ### Link expiry
 
 > **Deliberate divergence — both rules apply.** The reference expires a link on
