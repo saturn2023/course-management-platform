@@ -297,6 +297,17 @@ Route::post('/enrol/{token}', function (Request $request, string $token) {
     }
 
     /*
+     * form_data is a JSON column, and $validated still holds the UploadedFile
+     * objects under these keys, which cannot be encoded — any submission with a
+     * file attached failed with "Type is not supported" before the row was
+     * written. Replace them with the stored paths, which is what
+     * 'uploaded_documents' above already does for the documents[] array.
+     */
+    $validated['id_document'] = $idDocumentPath;
+    $validated['vet_transcript'] = $vetTranscriptPath;
+    unset($validated['documents']);
+
+    /*
     |--------------------------------------------------------------------------
     | Save submission
     |--------------------------------------------------------------------------
