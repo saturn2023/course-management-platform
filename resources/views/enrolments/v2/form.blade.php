@@ -126,7 +126,13 @@
 
     document.querySelectorAll('#ams2-enrol .ef-upload-row span, #ams2-enrol .ef-upload-row label')
         .forEach(function (el) {
-            el.textContent = el.textContent.replace(/\d+(\.\d+)?\s?MB/gi, limit);
+            el.textContent = el.textContent.replace(/\d+(\.\d+)?\s?(MB|KB)/gi, limit);
         });
 })();
 </script>
+
+{{--
+    Last, because it reads window.AMS2 and expects the field toggles above to
+    have wired themselves up already.
+--}}
+<script src="{{ asset('js/ams2-enrolment.js') }}"></script>
