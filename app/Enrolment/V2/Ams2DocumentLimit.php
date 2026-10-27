@@ -54,7 +54,15 @@ class Ams2DocumentLimit
      */
     public function label(): string
     {
-        $megabytes = $this->bytes() / 1048576;
+        $bytes = $this->bytes();
+
+        // Under a megabyte, "0MB" would be the honest rounding and a useless
+        // thing for a learner to read.
+        if ($bytes < 1048576) {
+            return max(1, (int) floor($bytes / 1024)).'KB';
+        }
+
+        $megabytes = $bytes / 1048576;
 
         if ($megabytes === floor($megabytes)) {
             return ((int) $megabytes).'MB';
