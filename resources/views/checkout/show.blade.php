@@ -37,11 +37,19 @@
             background: var(--page-bg);
             color: var(--text);
             margin: 0;
-            padding: 2rem 1rem;
             line-height: 1.5;
         }
 
-        .container { max-width: 900px; margin: 0 auto; }
+        /*
+         * The page gutter lives on the container, not on <body>: the site header
+         * is full-bleed and sticky, so body padding would inset it and offset
+         * where it sticks.
+         */
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
 
         h1.page-title {
             text-align: center;
@@ -405,6 +413,8 @@
     </style>
 </head>
 <body>
+<x-layout.header />
+
 <div class="container">
     <h1 class="page-title">Registration Page</h1>
 
