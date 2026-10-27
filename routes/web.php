@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\Ams2EnrolmentController;
 use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CheckoutLoadController;
 use App\Http\Controllers\PurchaseOrderCheckoutController;
 use App\Http\Controllers\XeroAuthController;
+use App\Http\Middleware\RouteEnrolmentLinkToV2;
 use App\Jobs\SubmitEnrolmentToApiJob;
 use App\Models\CheckoutSession;
 use App\Models\Course;
@@ -134,7 +136,7 @@ Route::get('/enrol/{token}', function (string $token) {
         'languages' => $languages,
         'countries' => $countries,
     ]);
-})->name('enrol.show');
+})->middleware(RouteEnrolmentLinkToV2::class)->name('enrol.show');
 
 Route::post('/enrol/{token}', function (Request $request, string $token) {
     $enrolment = Enrolment::with(['student', 'course', 'order'])
@@ -353,8 +355,30 @@ Route::get('/enrolment-completed', function () {
 })->name('enrolment.completed');
 
 Route::get('/enrolment-not-successful', function () {
-    return response()->view('enrolments.failed', [], 404);
+    /*
+     * An expired link gets its own wording. It is a genuine link, so "contact
+     * us for a new one" is the useful thing to say; "not valid" would send the
+     * learner looking for a mistake they did not make.
+     */
+    return response()->view('enrolments.failed', [
+        'reason' => session('enrolment_failure_reason'),
+    ], 404);
 })->name('enrolment.failed');
+
+/*
+|--------------------------------------------------------------------------
+| Enrolment v2
+|--------------------------------------------------------------------------
+|
+| Links reach this page only via RouteEnrolmentLinkToV2 on enrol.show, which
+| is the port of the reference hooking template_redirect ahead of the old
+| handler. The page re-checks everything that middleware checked: a learner can
+| sit here for an hour, and the secret key in the URL is shareable.
+|
+*/
+
+Route::get('/enrolment-v2', [Ams2EnrolmentController::class, 'show'])
+    ->name('enrol.v2.show');
 
 /*
 |--------------------------------------------------------------------------

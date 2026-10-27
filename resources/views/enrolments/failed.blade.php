@@ -1,8 +1,18 @@
+{{--
+    Shown for any unusable enrolment link. $reason is optional and flashed by
+    whoever redirected here; 'expired' is the only value that changes the
+    wording, because an expired link is genuine and the learner needs a new one
+    rather than a reason to doubt the one they have.
+--}}
+@php
+    $reason ??= null;
+    $expired = $reason === 'expired';
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Registration Link Unavailable</title>
+    <title>{{ $expired ? 'Enrolment Link Expired' : 'Registration Link Unavailable' }}</title>
     <x-layout.fonts />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -60,15 +70,27 @@
     <div class="page">
         <div class="icon">!</div>
 
-        <h1>Registration Link Unavailable</h1>
+        @if ($expired)
+            <h1>Enrolment Link Expired</h1>
 
-        <p>
-            This enrolment link is invalid, expired, or has already been completed.
-        </p>
+            <p>
+                This enrolment link has expired. Your enrolment has not been submitted.
+            </p>
 
-        <p class="support">
-            Please contact AMS Training if you believe this is an error.
-        </p>
+            <p class="support">
+                Please contact AMS Training for a new link.
+            </p>
+        @else
+            <h1>Registration Link Unavailable</h1>
+
+            <p>
+                This enrolment link is invalid, expired, or has already been completed.
+            </p>
+
+            <p class="support">
+                Please contact AMS Training if you believe this is an error.
+            </p>
+        @endif
     </div>
 </body>
 </html>

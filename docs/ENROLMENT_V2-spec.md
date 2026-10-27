@@ -51,6 +51,21 @@ has a v2 row**: they are sent back to v2 before either question is asked,
 because handing them to the old form would enrol them a second time. The
 reference is explicit about this ordering and it must be preserved.
 
+### The routing decision runs on GET only
+
+The reference hooks `template_redirect` ahead of the old `/enrol/` handler, and
+every outcome is either "go to v2" or "say nothing and let the old flow have
+it" — never a refusal. Here that is middleware on `enrol.show`, so the v1 route
+body needs no edit.
+
+It deliberately does **not** run on the POST. A POST to the old endpoint comes
+from someone who already has the old form open and filled in — *"Started on the
+old form: leave it with the old flow"* — and redirecting it would throw their
+answers away while protecting nothing, since no submission has been recorded
+yet. The redirect is also marked uncacheable: a cached one would pin a learner
+to whichever side of the decision they first saw, long after a published
+template or the rollout switch moved it.
+
 ### What counts as "already in the old flow"
 
 In the reference, *"this link has been used"* and *"this link is in the old
