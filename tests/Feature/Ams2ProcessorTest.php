@@ -350,7 +350,7 @@ class Ams2ProcessorTest extends TestCase
         Log::shouldHaveReceived('error')
             ->withArgs(fn (string $message, array $context = []) => str_contains($message, 'needs checking')
                 && ($context['real_email'] ?? null) === 'learner@example.test'
-                && ($context['reference'] ?? null) === 'AMS2-'.$row->id)
+                && ($context['reference'] ?? null) === $row->displayRef())
             ->once();
     }
 

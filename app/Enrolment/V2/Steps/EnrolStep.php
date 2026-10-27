@@ -89,7 +89,7 @@ class EnrolStep implements Ams2Step
             ]);
 
             Log::info('[AMS2] enrolled', [
-                'reference' => $row->reference(),
+                'reference' => $row->displayRef(),
                 'enrolment_id' => $enrolmentId,
                 'learner_id' => $result->get('enrolment_data.learner_id'),
             ]);

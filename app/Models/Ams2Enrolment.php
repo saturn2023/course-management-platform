@@ -67,10 +67,46 @@ class Ams2Enrolment extends Model
     }
 
     /**
-     * Reference quoted in alerts, matching the WordPress "AMS2-{id}" format.
+     * Offset applied to the row id to produce the operator-facing number.
+     *
+     * The table's AUTO_INCREMENT cannot be relied on to start high: it is table
+     * state rather than schema, so a TRUNCATE resets it, recreating the table
+     * skips the migration that set it (that migration is already recorded as
+     * run), and MariaDB 10.4 recomputes it as MAX(id)+1 on every restart.
+     *
+     * Deriving the number instead makes it stable under all three.
      */
-    public function reference(): string
+    public const REFERENCE_OFFSET = 100000;
+
+    /**
+     * The operator-facing number for this row. Never the raw id.
+     */
+    public function displayNumber(): int
     {
-        return 'AMS2-'.$this->id;
+        return self::REFERENCE_OFFSET + (int) $this->id;
+    }
+
+    /**
+     * Reference quoted in logs and alerts, in the WordPress "AMS2-{n}" format.
+     */
+    public function displayRef(): string
+    {
+        return 'AMS2-'.$this->displayNumber();
+    }
+
+    /**
+     * The address sent to RTO Data in email and other_email while the enrolment
+     * is being created, replaced with the learner's real address afterwards.
+     *
+     * Deliberately NOT a valid address — no '@' — reproducing the reference
+     * exactly, so no email validation may be applied to this field.
+     *
+     * Built from displayNumber() rather than the raw id: two rows that reused
+     * an id after a counter reset would otherwise be handed the same
+     * placeholder in RTO Data.
+     */
+    public function placeholderEmail(): string
+    {
+        return 'processing'.$this->displayNumber().'hold.invalid';
     }
 }

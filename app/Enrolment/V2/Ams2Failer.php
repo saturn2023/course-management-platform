@@ -39,7 +39,7 @@ class Ams2Failer
             ]);
 
             Log::warning('[AMS2] step_failed', [
-                'reference' => $row->reference(),
+                'reference' => $row->displayRef(),
                 'attempt' => $attempts,
                 'back_to' => $backTo,
                 'message' => $message,
@@ -56,7 +56,7 @@ class Ams2Failer
         ]);
 
         Log::error('[AMS2] needs_review', [
-            'reference' => $row->reference(),
+            'reference' => $row->displayRef(),
             'resume_status' => $backTo,
             'message' => $message,
         ]);

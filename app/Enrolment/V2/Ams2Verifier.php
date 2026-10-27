@@ -47,7 +47,7 @@ class Ams2Verifier
         ]);
 
         Log::warning('[AMS2] verify_started', [
-            'reference' => $row->reference(),
+            'reference' => $row->displayRef(),
             'reason' => $reason,
         ]);
     }
@@ -142,7 +142,7 @@ class Ams2Verifier
         ]);
 
         Log::warning('[AMS2] verify_check_failed', [
-            'reference' => $row->reference(),
+            'reference' => $row->displayRef(),
             'check' => $checks.' of '.self::MAX_CHECKS,
         ]);
     }
@@ -170,7 +170,7 @@ class Ams2Verifier
             ]);
 
             Log::info('[AMS2] verify_linked', [
-                'reference' => $row->reference(),
+                'reference' => $row->displayRef(),
                 'enrolment_id' => $enrolmentId,
                 'floor' => $floor,
             ]);
@@ -224,7 +224,7 @@ class Ams2Verifier
         ]);
 
         Log::info('[AMS2] verify_reenrol', [
-            'reference' => $row->reference(),
+            'reference' => $row->displayRef(),
             'reason' => $reason,
             'reenrol' => (int) $row->reenrol_count,
         ]);

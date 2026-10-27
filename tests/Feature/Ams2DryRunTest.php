@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Enrolment\V2\Ams2DryRun;
-use App\Enrolment\V2\Ams2EnrolArgs;
 use App\Enrolment\V2\Ams2Status;
 use App\Models\Ams2Enrolment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -91,7 +90,7 @@ class Ams2DryRunTest extends TestCase
         $row = $this->row();
         $json = app(Ams2DryRun::class)->toJson($row);
 
-        $this->assertStringContainsString(Ams2EnrolArgs::placeholderEmail($row->id), $json);
+        $this->assertStringContainsString($row->placeholderEmail(), $json);
         $this->assertStringNotContainsString('learner@example.test', $json);
         $this->assertStringNotContainsString('contact_email', $json);
     }

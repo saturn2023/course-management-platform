@@ -143,7 +143,7 @@ class SendDocumentsStep implements Ams2Step
         }
 
         Log::warning('[AMS2] documents_missing', [
-            'reference' => $row->reference(),
+            'reference' => $row->displayRef(),
             'count' => count($problems),
         ]);
 

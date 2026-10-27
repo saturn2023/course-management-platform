@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Log;
  * The fields are already the ones ams2_alert() quotes, because the point of the
  * alert is that someone can repair the enrolment by hand from it — in
  * particular `real_email`, since RTO Data may still be holding the
- * 'processing{id}hold.invalid' placeholder for this learner.
+ * 'processing{n}hold.invalid' placeholder for this learner.
  */
 class Ams2Alert
 {
@@ -28,7 +28,7 @@ class Ams2Alert
         $data = (array) ($row->student_data ?? []);
 
         Log::error('[AMS2] '.$heading, [
-            'reference' => $row->reference(),
+            'reference' => $row->displayRef(),
             'enrolment_row_id' => $row->id,
             'student' => $row->studentName(),
             'real_email' => $row->real_email,

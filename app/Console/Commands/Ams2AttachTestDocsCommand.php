@@ -45,7 +45,7 @@ class Ams2AttachTestDocsCommand extends Command
              * Attaching a second copy would send the same file to RTO Data
              * twice, so it takes --force.
              */
-            $this->error($row->reference().' already has '.$existing.' document(s). Use --force to attach anyway.');
+            $this->error($row->displayRef().' already has '.$existing.' document(s). Use --force to attach anyway.');
 
             return self::FAILURE;
         }
@@ -63,7 +63,7 @@ class Ams2AttachTestDocsCommand extends Command
             'docs_final' => true,
         ]);
 
-        $this->info('Attached to '.$row->reference().' (status '.$row->status.').');
+        $this->info('Attached to '.$row->displayRef().' (status '.$row->status.').');
 
         return self::SUCCESS;
     }

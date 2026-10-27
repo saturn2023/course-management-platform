@@ -110,11 +110,11 @@ class Ams2MakeTestRowCommand extends Command
             ],
         ]);
 
-        $this->info('Created '.$row->reference().' (id '.$row->id.')');
+        $this->info('Created '.$row->displayRef().' (row id '.$row->id.')');
         $this->line('  learner     : '.$first.' '.$last.'  dob '.$dob.'  gender '.$row->student_data['gender']);
         $this->line('  course/plan : '.$row->course_id.' / '.$row->plan_id);
         $this->line('  status      : '.$row->status);
-        $this->line('  placeholder : processing'.$row->id.'hold.invalid');
+        $this->line('  placeholder : '.$row->placeholderEmail());
         $this->line('  real email  : '.$row->real_email);
 
         if ($withDocs) {

@@ -23,7 +23,7 @@ abstract class StubbedStep implements Ams2Step
     public function handle(Ams2Enrolment $row): bool
     {
         Log::info('[AMS2] next step not implemented', [
-            'reference' => $row->reference(),
+            'reference' => $row->displayRef(),
             'status' => $row->status,
             'awaiting_step' => static::class,
             'would_advance_to' => $this->to(),

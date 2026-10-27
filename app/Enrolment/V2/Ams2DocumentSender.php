@@ -74,7 +74,7 @@ class Ams2DocumentSender
             $failed[$document->doc_type] = 'The file is missing from the website server.';
 
             Log::error('[AMS2] document_file_missing', [
-                'reference' => $row->reference(),
+                'reference' => $row->displayRef(),
                 'doc_type' => $document->doc_type,
                 'file' => basename($document->file_path),
             ]);
@@ -97,7 +97,7 @@ class Ams2DocumentSender
             ]);
 
             Log::info('[AMS2] document_sent', [
-                'reference' => $row->reference(),
+                'reference' => $row->displayRef(),
                 'doc_type' => $document->doc_type,
                 'name' => $document->original_name,
             ]);
@@ -117,7 +117,7 @@ class Ams2DocumentSender
         ]);
 
         Log::log($final ? 'error' : 'warning', '[AMS2] document_send_failed', [
-            'reference' => $row->reference(),
+            'reference' => $row->displayRef(),
             'doc_type' => $document->doc_type,
             'attempt' => $attempts.' of '.self::MAX_ATTEMPTS,
             'http_status' => $result->httpStatus,

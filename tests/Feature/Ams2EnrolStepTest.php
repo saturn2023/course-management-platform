@@ -142,7 +142,7 @@ class Ams2EnrolStepTest extends TestCase
 
         Http::assertSent(function (Request $request) use ($row) {
             $values = $this->decodeEnrolValues($request);
-            $placeholder = Ams2EnrolArgs::placeholderEmail($row->id);
+            $placeholder = $row->placeholderEmail();
 
             return $values['email'] === $placeholder
                 && $values['other_email'] === $placeholder
@@ -157,7 +157,24 @@ class Ams2EnrolStepTest extends TestCase
         $row = $this->row();
 
         // Deliberately not a valid address: no '@'. Reproduced exactly.
-        $this->assertSame('processing'.$row->id.'hold.invalid', Ams2EnrolArgs::placeholderEmail($row->id));
+        $this->assertSame(
+            'processing'.$row->displayNumber().'hold.invalid',
+            $row->placeholderEmail(),
+        );
+    }
+
+    public function test_the_reference_and_placeholder_do_not_depend_on_the_raw_id(): void
+    {
+        $row = $this->row();
+        $row->forceFill(['id' => 1])->saveQuietly();
+
+        /*
+         * AUTO_INCREMENT cannot be relied on to start high — a truncate resets
+         * it, and MariaDB recomputes it on restart — so the operator-facing
+         * number is derived instead.
+         */
+        $this->assertSame('AMS2-100001', $row->displayRef());
+        $this->assertSame('processing100001hold.invalid', $row->placeholderEmail());
     }
 
     public function test_the_payload_carries_the_real_name_uppercased(): void

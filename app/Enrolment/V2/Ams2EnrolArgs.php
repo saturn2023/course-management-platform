@@ -16,7 +16,8 @@ use DateTime;
  *     uppercased, which is AVETMISS convention, not anonymisation.
  *
  *  2. email and other_email carry a placeholder that is not a valid address:
- *     'processing{id}hold.invalid', with no '@'. The real address is written in
+ *     'processing{n}hold.invalid', with no '@', where {n} is the row's
+ *     display number. The real address is written in
  *     a later step, once the enrolment exists. Reproduced exactly.
  */
 class Ams2EnrolArgs
@@ -38,18 +39,13 @@ class Ams2EnrolArgs
      */
     private const COUNTRY_CODE = '1101';
 
-    public static function placeholderEmail(int $rowId): string
-    {
-        return 'processing'.$rowId.'hold.invalid';
-    }
-
     /**
      * @return array<string, mixed>
      */
     public function build(Ams2Enrolment $row): array
     {
         $data = (array) ($row->student_data ?? []);
-        $placeholder = self::placeholderEmail((int) $row->id);
+        $placeholder = $row->placeholderEmail();
 
         $args = [
             'first_name' => $this->upper($data['first_name'] ?? ''),

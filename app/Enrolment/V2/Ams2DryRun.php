@@ -43,7 +43,7 @@ class Ams2DryRun
         $args = $this->args->build($row);
 
         return [
-            'row' => $row->reference(),
+            'row' => $row->displayRef(),
             'id' => $row->id,
             'status' => $row->status,
             'endpoint' => rtrim((string) config('services.enrolment_api.base_url'), '/').'/'.Ams2ApiClient::ENROL,
