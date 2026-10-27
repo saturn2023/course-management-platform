@@ -92,6 +92,17 @@ return [
     'connect_timeout' => env('AMS2_CONNECT_TIMEOUT', 15),
     'timeout' => env('AMS2_TIMEOUT', 90),
     'enrolment_floor' => env('AMS2_ENROLMENT_FLOOR'),
+
+    /*
+     * The confirmation email's From address.
+     *
+     * Deliberately NOT MAIL_FROM_ADDRESS: that is whatever the environment
+     * sends its own mail as, and on a dev machine it is usually the agency's
+     * address. The reference hardcodes this one in the wp_mail header, so a
+     * learner's confirmation has to come from it whatever the environment.
+     */
+    'mail_from' => env('AMS2_MAIL_FROM', 'info@amstraining.com.au'),
+    'mail_from_name' => env('AMS2_MAIL_FROM_NAME', 'AMS Training'),
 ],
 
 'pin' => [

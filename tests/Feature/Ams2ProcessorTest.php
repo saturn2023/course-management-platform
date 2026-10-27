@@ -9,7 +9,9 @@ use App\Models\Ams2Enrolment;
 use App\Models\Ams2EnrolmentDocument;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use App\Models\EnrolmentEmailTemplate;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -35,6 +37,17 @@ class Ams2ProcessorTest extends TestCase
          * covered in Ams2EnrolStepTest.
          */
         config()->set('services.ams2.enabled', true);
+
+        Mail::fake();
+
+        // The confirmation step needs a published template for this pair.
+        EnrolmentEmailTemplate::create([
+            'name' => 'Confirmation',
+            'course_id' => 32,
+            'plan_id' => 38,
+            'is_published' => true,
+            'email_body' => '<p>Hello {first_name} {last_name}.</p>',
+        ]);
         config()->set('services.enrolment_api.public_key', 'pk_test');
         config()->set('services.enrolment_api.origin', 'https://ams.test');
         config()->set('services.ams2.enrolment_floor', 500000);
@@ -174,60 +187,20 @@ class Ams2ProcessorTest extends TestCase
     |--------------------------------------------------------------------------
     */
 
-    public function test_a_run_advances_a_row_as_far_as_the_implemented_steps_go(): void
+    public function test_one_run_carries_a_row_from_received_to_complete(): void
     {
-        // Nothing to upload and uploading is finished, so documents and the
-        // email update both run through. The confirmation email is not built,
-        // so it stops there.
+        // Nothing to upload and uploading is finished, so one run carries the
+        // row the whole way: enrol, documents, email update, confirmation.
         $row = $this->row(['docs_final' => true]);
 
         $this->processor()->run();
 
-        $this->assertSame(Ams2Status::UPDATED, $row->fresh()->status);
+        $this->assertSame(Ams2Status::COMPLETE, $row->fresh()->status);
+        $this->assertNotNull($row->fresh()->email_sent_at);
     }
 
-    public function test_an_unimplemented_step_stops_the_row_rather_than_advancing_it(): void
-    {
-        $row = $this->row(['status' => Ams2Status::UPDATED]);
 
-        $this->processor()->run();
 
-        /*
-         * A stub that advanced would mark work as done that never happened:
-         * the row would reach `complete` with no confirmation delivered, and
-         * nothing would ever come back for it. Stopping keeps it visible and
-         * resumable.
-         */
-        $this->assertSame(Ams2Status::UPDATED, $row->fresh()->status);
-    }
-
-    public function test_an_unimplemented_step_is_logged(): void
-    {
-        Log::spy();
-
-        $this->row(['status' => Ams2Status::UPDATED]);
-
-        $this->processor()->run();
-
-        Log::shouldHaveReceived('info')
-            ->withArgs(fn (string $message) => str_contains($message, 'next step not implemented'))
-            ->once();
-    }
-
-    public function test_every_unimplemented_step_stops_its_row(): void
-    {
-        $rows = [];
-
-        foreach ([Ams2Status::UPDATED] as $status) {
-            $rows[$status] = $this->row(['status' => $status]);
-        }
-
-        $this->processor()->run();
-
-        foreach ($rows as $status => $row) {
-            $this->assertSame($status, $row->fresh()->status);
-        }
-    }
 
     public function test_a_row_still_waiting_on_uploads_is_left_at_enrolled(): void
     {
@@ -270,7 +243,7 @@ class Ams2ProcessorTest extends TestCase
 
         $this->assertSame(
             Ams2Processor::BATCH_LIMIT,
-            Ams2Enrolment::where('status', Ams2Status::UPDATED)->count(),
+            Ams2Enrolment::where('status', Ams2Status::COMPLETE)->count(),
         );
         $this->assertSame(3, Ams2Enrolment::where('status', Ams2Status::RECEIVED)->count());
     }

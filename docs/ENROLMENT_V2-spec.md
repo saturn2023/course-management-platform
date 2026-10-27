@@ -73,6 +73,42 @@ Plus `needs_review`, which nothing transitions out of except the admin Resume ac
 6. Claim `updated → emailing`. Send the per-course confirmation email from the
    template. Then `complete`. Do NOT send the old confirmation email in this flow.
 
+   **Recipients and sender.** To the learner's `real_email` only — the reference
+   sets no CC, no BCC, no copy to info@ or sales@, and no Reply-To. From is
+   `AMS Training <info@amstraining.com.au>`, hardcoded there and configurable
+   here as `AMS2_MAIL_FROM` / `AMS2_MAIL_FROM_NAME`. Deliberately NOT
+   `MAIL_FROM_ADDRESS`: that is whatever the environment sends its own mail as,
+   which on a dev machine is usually the agency's address.
+
+   **No published template at send time** → `needs_review` with an alert naming
+   the course and plan, and no send. Retrying cannot conjure a template.
+
+   **Never send twice.** A row found at `emailing` with `email_sent_at` already
+   set is moved to `complete` without resending. This is checked *before* the
+   claim, because such a row sits at `emailing` and could never be claimed from
+   `updated`.
+
+   > This is a deliberate improvement on the reference, which has no duplicate
+   > guard at all: `email_sent_at` is written but never read back, so a crash
+   > between `wp_mail` returning and the status write leaves the row at
+   > `emailing`, the 30-minute sweep parks it, and Resume sends the
+   > confirmation a second time.
+   >
+   > `email_sent_at` and `complete` are written in a single update immediately
+   > after the send returns, making that window as small as it can be made.
+   > **It cannot be closed from inside the process**: a crash between the SMTP
+   > server accepting the message and that update will still cause one resend.
+   > Closing it properly would need the send and the state change to share a
+   > transaction, which SMTP cannot join.
+
+   **Subject fallback — a deliberate divergence.** The subject is
+   `'Enrolment confirmation ' . $title`. The reference takes `$title` from the
+   row alone, so a row whose `course_title` RTO Data left empty gets a bare
+   `"Enrolment confirmation"`. Here the row's title is tried first, then the
+   local `Course` matching the same course_id/plan_id, and only then the bare
+   subject. A learner-visible subject with no course name in it is worse than
+   matching the reference exactly.
+
 ### Placeholder email
 
 Exactly:

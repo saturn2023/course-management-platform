@@ -67,6 +67,33 @@ class Ams2Enrolment extends Model
     }
 
     /**
+     * The course title used in the confirmation subject.
+     *
+     * RTO Data returns one on enrol and it is stored on the row, but not
+     * always — row AMS2-100001 came back with an empty string. The reference
+     * would then send a bare "Enrolment confirmation", so this falls back to
+     * the local Course for the same course_id/plan_id first. A deliberate
+     * divergence: a learner-visible subject with no course name in it is worse
+     * than matching the reference exactly.
+     *
+     * Compared as strings because the local mapping columns are nullable
+     * strings, which also keeps MySQL and SQLite behaving the same.
+     */
+    public function resolvedCourseTitle(): string
+    {
+        $title = trim((string) $this->course_title);
+
+        if ($title !== '') {
+            return $title;
+        }
+
+        return trim((string) (Course::query()
+            ->where('ams_enrolment_code', (string) $this->course_id)
+            ->where('ams_plan_id', (string) $this->plan_id)
+            ->value('title') ?? ''));
+    }
+
+    /**
      * Offset applied to the row id to produce the operator-facing number.
      *
      * The table's AUTO_INCREMENT cannot be relied on to start high: it is table
