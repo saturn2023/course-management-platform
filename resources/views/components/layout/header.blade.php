@@ -20,7 +20,7 @@
     $navLinks = [
         ['label' => 'Home', 'url' => '/'],
         ['label' => 'About', 'url' => '/about'],
-        ['label' => 'Student Info', 'url' => '/student-info'],
+        ['label' => 'Student Info', 'url' => '/student-information'],
         ['label' => 'Contact', 'url' => '/contact'],
     ];
 @endphp
