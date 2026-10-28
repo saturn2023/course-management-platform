@@ -1,11 +1,14 @@
 <?php
 
+use App\Http\Controllers\Ams2EnrolmentController;
+use App\Http\Controllers\Ams2SubmissionController;
 use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CheckoutLoadController;
 use App\Http\Controllers\PurchaseOrderCheckoutController;
 use App\Http\Controllers\StudentDocumentController;
 use App\Http\Controllers\XeroAuthController;
+use App\Http\Middleware\RouteEnrolmentLinkToV2;
 use App\Jobs\SubmitEnrolmentToApiJob;
 use App\Models\AboutPageSetting;
 use App\Models\CheckoutSession;
@@ -138,7 +141,7 @@ Route::get('/enrol/{token}', function (string $token) {
         'languages' => $languages,
         'countries' => $countries,
     ]);
-})->name('enrol.show');
+})->middleware(RouteEnrolmentLinkToV2::class)->name('enrol.show');
 
 Route::post('/enrol/{token}', function (Request $request, string $token) {
     $enrolment = Enrolment::with(['student', 'course', 'order'])
@@ -301,6 +304,17 @@ Route::post('/enrol/{token}', function (Request $request, string $token) {
     }
 
     /*
+     * form_data is a JSON column, and $validated still holds the UploadedFile
+     * objects under these keys, which cannot be encoded — any submission with a
+     * file attached failed with "Type is not supported" before the row was
+     * written. Replace them with the stored paths, which is what
+     * 'uploaded_documents' above already does for the documents[] array.
+     */
+    $validated['id_document'] = $idDocumentPath;
+    $validated['vet_transcript'] = $vetTranscriptPath;
+    unset($validated['documents']);
+
+    /*
     |--------------------------------------------------------------------------
     | Save submission
     |--------------------------------------------------------------------------
@@ -346,8 +360,53 @@ Route::get('/enrolment-completed', function () {
 })->name('enrolment.completed');
 
 Route::get('/enrolment-not-successful', function () {
-    return response()->view('enrolments.failed', [], 404);
+    /*
+     * An expired link gets its own wording. It is a genuine link, so "contact
+     * us for a new one" is the useful thing to say; "not valid" would send the
+     * learner looking for a mistake they did not make.
+     */
+    return response()->view('enrolments.failed', [
+        'reason' => session('enrolment_failure_reason'),
+    ], 404);
 })->name('enrolment.failed');
+
+/*
+|--------------------------------------------------------------------------
+| Enrolment v2
+|--------------------------------------------------------------------------
+|
+| Links reach this page only via RouteEnrolmentLinkToV2 on enrol.show, which
+| is the port of the reference hooking template_redirect ahead of the old
+| handler. The page re-checks everything that middleware checked: a learner can
+| sit here for an hour, and the secret key in the URL is shareable.
+|
+*/
+
+Route::get('/enrolment-v2', [Ams2EnrolmentController::class, 'show'])
+    ->name('enrol.v2.show');
+
+/*
+ * The three requests the form makes, plus a token refresh.
+ *
+ * The enrolment is saved first and each document is uploaded afterwards in its
+ * own request, so one flaky upload can be retried without resubmitting the
+ * form, and no single request has to carry every document at once.
+ *
+ * All four stay in the `web` group: they need the session for CSRF, and the
+ * rollout switch reads the logged-in user. Authorisation itself is the secret
+ * key in the body, which every one of them re-checks.
+ */
+Route::post('/enrolment-v2/submit', [Ams2SubmissionController::class, 'submit'])
+    ->name('enrol.v2.submit');
+
+Route::post('/enrolment-v2/documents', [Ams2SubmissionController::class, 'documents'])
+    ->name('enrol.v2.documents');
+
+Route::post('/enrolment-v2/finalise', [Ams2SubmissionController::class, 'finalise'])
+    ->name('enrol.v2.finalise');
+
+Route::get('/enrolment-v2/token', [Ams2SubmissionController::class, 'token'])
+    ->name('enrol.v2.token');
 
 /*
 |--------------------------------------------------------------------------

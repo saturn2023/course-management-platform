@@ -4,6 +4,8 @@ use App\Http\Middleware\CaptureVisitorAttribution;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -39,5 +41,34 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        /*
+         * A stale CSRF token on the v2 enrolment endpoints has to come back in
+         * the same envelope as every other refusal, with the code the browser
+         * script looks for. On seeing `nonce` it fetches a fresh token and
+         * retries once — the port of the reference's ams2_nonce dance — so a
+         * learner who left the form open past the session lifetime does not
+         * lose what they typed.
+         *
+         * Without this they would get Laravel's own 419 page, which the script
+         * cannot read, and their answers would be gone.
+         */
+        /*
+         * Matched on the 419 rather than on TokenMismatchException, because
+         * the handler's prepareException() has already converted it by the
+         * time render callbacks are consulted — a callback typed to
+         * TokenMismatchException never fires. 419 is only ever CSRF.
+         */
+        $exceptions->render(function (HttpExceptionInterface $exception, Request $request) {
+            if ($exception->getStatusCode() !== 419 || ! $request->is('enrolment-v2/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'success' => false,
+                'data' => [
+                    'code' => 'nonce',
+                    'message' => 'Your session has expired. Refresh the page and try again.',
+                ],
+            ], 403);
+        });
     })->create();
