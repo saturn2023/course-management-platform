@@ -73,7 +73,7 @@ class CourseCardLinkTest extends TestCase
     {
         $course = $this->course(['slug' => 'my-custom-slug']);
 
-        $this->get(route('mockups.hero-banner'))
+        $this->get(route('home'))
             ->assertOk()
             ->assertSee('href="' . route('courses.show', $course->slug) . '"', false);
     }

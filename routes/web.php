@@ -30,8 +30,39 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', function () {
-    return view('welcome');
-});
+    // Same query as /mockups/online-refresher-courses-live: live records from
+    // /admin/courses, so image, code, card title, order and the two toggles all
+    // take effect on the homepage as soon as they are saved in admin.
+    $courses = Course::query()
+        ->where('status', 'active')
+        ->where('show_on_homepage', true)
+        ->orderBy('display_order')
+        ->orderBy('id')
+        ->get();
+
+    // Same live-from-admin approach for the package cards (/admin/course-packages).
+    $packages = CoursePackage::query()
+        ->where('status', 'active')
+        ->where('show_on_homepage', true)
+        ->orderBy('display_order')
+        ->orderBy('id')
+        ->get();
+
+    // Accordion rows for the enrolment section, live from /admin/enrolment-steps:
+    // active only, in the admin's order (see EnrolmentStep::scopeForHomepage).
+    $enrolmentSteps = EnrolmentStep::query()->forHomepage()->get();
+
+    // Review cards, live from /admin/reviews: active only, in the admin's
+    // order (see Review::scopeForHomepage).
+    $reviews = Review::query()->forHomepage()->get();
+
+    return view('mockups.hero-banner', [
+        'courses' => $courses,
+        'packages' => $packages,
+        'enrolmentSteps' => $enrolmentSteps,
+        'reviews' => $reviews,
+    ]);
+})->name('home');
 
 /*
 |--------------------------------------------------------------------------
@@ -462,43 +493,10 @@ Route::get('/mockups/header', function () {
 })->name('mockups.header');
 
 /*
- * Standalone mockup of the hero banner (<x-home.hero-banner>) shown below the
- * header. Temporary — for review of the block in isolation.
+ * The hero banner mockup grew into the full homepage and now lives at /.
+ * Permanent so links shared during client review land on the real page.
  */
-Route::get('/mockups/hero-banner', function () {
-    // Same query as /mockups/online-refresher-courses-live: live records from
-    // /admin/courses, so image, code, card title, order and the two toggles all
-    // take effect on the homepage as soon as they are saved in admin.
-    $courses = Course::query()
-        ->where('status', 'active')
-        ->where('show_on_homepage', true)
-        ->orderBy('display_order')
-        ->orderBy('id')
-        ->get();
-
-    // Same live-from-admin approach for the package cards (/admin/course-packages).
-    $packages = CoursePackage::query()
-        ->where('status', 'active')
-        ->where('show_on_homepage', true)
-        ->orderBy('display_order')
-        ->orderBy('id')
-        ->get();
-
-    // Accordion rows for the enrolment section, live from /admin/enrolment-steps:
-    // active only, in the admin's order (see EnrolmentStep::scopeForHomepage).
-    $enrolmentSteps = EnrolmentStep::query()->forHomepage()->get();
-
-    // Review cards, live from /admin/reviews: active only, in the admin's
-    // order (see Review::scopeForHomepage).
-    $reviews = Review::query()->forHomepage()->get();
-
-    return view('mockups.hero-banner', [
-        'courses' => $courses,
-        'packages' => $packages,
-        'enrolmentSteps' => $enrolmentSteps,
-        'reviews' => $reviews,
-    ]);
-})->name('mockups.hero-banner');
+Route::permanentRedirect('/mockups/hero-banner', '/');
 
 /*
  * Public Student Information page, edited at Admin → Student Information
