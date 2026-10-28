@@ -105,6 +105,44 @@ class Ams2FormPageTest extends TestCase
         }
     }
 
+    public function test_it_renders_the_site_header(): void
+    {
+        $response = $this->openForm($this->enrolment());
+
+        /*
+         * Markers from the component itself, so this fails if the header stops
+         * being rendered rather than merely being restyled. A learner reaching
+         * the form from an email has no other way back into the site.
+         */
+        $response->assertSee('ams-site-header', false);
+        $response->assertSee('ams-site-header__inner', false);
+        $response->assertSee('ash-primary-nav', false);
+    }
+
+    public function test_the_header_comes_before_the_form(): void
+    {
+        $html = $this->openForm($this->enrolment())->getContent();
+
+        $headerAt = strpos($html, 'ams-site-header__inner');
+        $formAt = strpos($html, 'id="ams2-form"');
+
+        $this->assertNotFalse($headerAt);
+        $this->assertNotFalse($formAt);
+        $this->assertLessThan($formAt, $headerAt);
+    }
+
+    public function test_the_body_margin_is_reset_so_the_header_is_full_bleed(): void
+    {
+        $html = $this->openForm($this->enrolment())->getContent();
+
+        /*
+         * Without this the browser's default body margin of 8px shows as a
+         * white strip down both sides of the dark header. The gutter belongs
+         * to .ef-wrapper, which has its own padding.
+         */
+        $this->assertMatchesRegularExpression('/body\s*\{[^}]*margin:\s*0/', $html);
+    }
+
     public function test_every_section_is_present(): void
     {
         $response = $this->openForm($this->enrolment());

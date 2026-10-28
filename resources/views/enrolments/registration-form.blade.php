@@ -8,6 +8,8 @@
 --}}
 @include('enrolments.partials.registration-styles')
 
+<x-layout.header />
+
 <div class="ef-wrapper">
 
     <h1 class="ef-top-heading">Important!</h1>

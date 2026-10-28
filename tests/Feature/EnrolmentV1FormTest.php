@@ -96,6 +96,19 @@ class EnrolmentV1FormTest extends TestCase
         }
     }
 
+    public function test_it_renders_the_site_header(): void
+    {
+        $enrolment = $this->enrolment();
+
+        // The old flow's form gets the same header as the v2 one, so a learner
+        // sees the same site whichever flow their course is on.
+        $response = $this->get('/enrol/'.$enrolment->enrolment_token);
+
+        $response->assertSee('ams-site-header', false);
+        $response->assertSee('ams-site-header__inner', false);
+        $response->assertSee('ash-primary-nav', false);
+    }
+
     public function test_the_form_carries_the_fields_the_api_payload_is_built_from(): void
     {
         $enrolment = $this->enrolment();

@@ -66,6 +66,8 @@
     }
 </style>
 
+<x-layout.header />
+
 <div class="ef-wrapper ams2-enrol" id="ams2-enrol">
 
     <h1 class="ef-top-heading">Important!</h1>

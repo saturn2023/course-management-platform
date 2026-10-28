@@ -6,6 +6,15 @@
     styles on top of these rather than restating them.
 --}}
 <style>
+    /*
+     * The site header above this is full-bleed, and the browser's default
+     * body margin of 8px shows as a white strip down both sides of it. The
+     * page gutter belongs to .ef-wrapper below, not to <body>.
+     */
+    body {
+        margin: 0;
+    }
+
     .ef-wrapper {
         max-width: 760px;
         margin: 0 auto;
